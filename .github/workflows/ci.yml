@@ -1,0 +1,202 @@
+name: CI
+
+on:
+  push:
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Swift and Xcode versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Resolve Dependencies
+        run: |
+          swift package resolve
+
+      - name: Select iOS Simulator
+        run: |
+          set -euo pipefail
+
+          xcrun simctl list runtimes -j > /tmp/runtimes.json
+          xcrun simctl list devices -j > /tmp/devices.json
+          xcrun simctl list devicetypes -j > /tmp/devicetypes.json
+
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+
+          with open("/tmp/runtimes.json") as f:
+              runtimes_data = json.load(f)
+
+          with open("/tmp/devices.json") as f:
+              devices_data = json.load(f)
+
+          with open("/tmp/devicetypes.json") as f:
+              device_types_data = json.load(f)
+
+          def version_tuple(version):
+              return tuple(
+                  int(part)
+                  for part in re.findall(r"\d+", version)
+              )
+
+          ios_runtimes = [
+              runtime
+              for runtime in runtimes_data["runtimes"]
+              if runtime.get("isAvailable", False)
+              and runtime.get("name", "").startswith("iOS ")
+          ]
+
+          if not ios_runtimes:
+              raise SystemExit(
+                  "No available iOS Simulator runtime found."
+              )
+
+          runtime = max(
+              ios_runtimes,
+              key=lambda item: version_tuple(
+                  item.get("version", "0")
+              )
+          )
+
+          runtime_id = runtime["identifier"]
+
+          available_devices = [
+              device
+              for device in devices_data
+                  .get("devices", {})
+                  .get(runtime_id, [])
+              if device.get("isAvailable", True)
+              and device.get("name", "").startswith("iPhone")
+          ]
+
+          preferred_names = [
+              "iPhone 17",
+              "iPhone 17 Pro",
+              "iPhone 17 Pro Max",
+              "iPhone Air",
+              "iPhone 16",
+              "iPhone 16 Pro",
+          ]
+
+          selected_device = None
+
+          for preferred_name in preferred_names:
+              selected_device = next(
+                  (
+                      device
+                      for device in available_devices
+                      if device.get("name") == preferred_name
+                  ),
+                  None
+              )
+
+              if selected_device is not None:
+                  break
+
+          if selected_device is None and available_devices:
+              selected_device = available_devices[0]
+
+          if selected_device is not None:
+              simulator_id = selected_device["udid"]
+
+          else:
+              device_types = device_types_data.get(
+                  "devicetypes",
+                  []
+              )
+
+              selected_device_type = None
+
+              for preferred_name in preferred_names:
+                  selected_device_type = next(
+                      (
+                          device_type
+                          for device_type in device_types
+                          if device_type.get("name")
+                              == preferred_name
+                      ),
+                      None
+                  )
+
+                  if selected_device_type is not None:
+                      break
+
+              if selected_device_type is None:
+                  selected_device_type = next(
+                      (
+                          device_type
+                          for device_type in device_types
+                          if device_type.get("name", "")
+                              .startswith("iPhone")
+                      ),
+                      None
+                  )
+
+              if selected_device_type is None:
+                  raise SystemExit(
+                      "No iPhone Simulator device type found."
+                  )
+
+              result = subprocess.run(
+                  [
+                      "xcrun",
+                      "simctl",
+                      "create",
+                      "CI iPhone",
+                      selected_device_type["identifier"],
+                      runtime_id,
+                  ],
+                  check=True,
+                  capture_output=True,
+                  text=True,
+              )
+
+              simulator_id = result.stdout.strip()
+
+          github_env = os.environ["GITHUB_ENV"]
+
+          with open(github_env, "a") as f:
+              f.write(
+                  f"SIMULATOR_ID={simulator_id}\n"
+              )
+          PY
+
+      - name: Boot iOS Simulator
+        run: |
+          set -euo pipefail
+
+          echo "Selected simulator: $SIMULATOR_ID"
+
+          xcrun simctl boot "$SIMULATOR_ID" || true
+
+          xcrun simctl bootstatus \
+            "$SIMULATOR_ID" \
+            -b
+
+      - name: Build and Test
+        run: |
+          set -euo pipefail
+
+          xcodebuild \
+            -scheme TrisPlaceRecognitionKit \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            test
