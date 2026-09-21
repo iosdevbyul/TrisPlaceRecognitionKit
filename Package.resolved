@@ -1,0 +1,15 @@
+{
+  "originHash" : "0f540474dc52000a9aa0e7dd625ae96cc7fecaf96a087ebf7b0283429ed7c0ff",
+  "pins" : [
+    {
+      "identity" : "trislocationkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/iosdevbyul/TrisLocationKit",
+      "state" : {
+        "branch" : "main",
+        "revision" : "f9e82cdbfd5e098f2ef1a98e961cd0f9420c13b4"
+      }
+    }
+  ],
+  "version" : 3
+}
