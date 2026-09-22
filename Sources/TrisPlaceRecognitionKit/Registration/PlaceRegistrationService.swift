@@ -14,13 +14,16 @@ public final class PlaceRegistrationService {
 
     private let locationProvider: any LocationProviding
     private let wifiProvider: any WiFiProviding
-
+    private let placeStore: any PlaceStoring
+    
     public init(
         locationProvider: any LocationProviding,
-        wifiProvider: any WiFiProviding
+        wifiProvider: any WiFiProviding,
+        placeStore: any PlaceStoring
     ) {
         self.locationProvider = locationProvider
         self.wifiProvider = wifiProvider
+        self.placeStore = placeStore
     }
 
     public func register(
@@ -43,10 +46,14 @@ public final class PlaceRegistrationService {
             bssid: network?.bssid
         )
 
-        return RegisteredPlace(
+        let place = RegisteredPlace(
             name: placeName,
             location: location,
             networkIdentity: networkIdentity
         )
+
+        try await placeStore.save(place)
+
+        return place
     }
 }

@@ -30,9 +30,12 @@ struct PlaceRegistrationServiceTests {
             )
         )
 
+        let placeStore = MockPlaceStore()
+
         let service = PlaceRegistrationService(
             locationProvider: locationProvider,
-            wifiProvider: wifiProvider
+            wifiProvider: wifiProvider,
+            placeStore: placeStore
         )
 
         let place = try await service.register(
@@ -73,9 +76,12 @@ struct PlaceRegistrationServiceTests {
 
         let wifiProvider = MockWiFiProvider()
 
+        let placeStore = MockPlaceStore()
+
         let service = PlaceRegistrationService(
             locationProvider: locationProvider,
-            wifiProvider: wifiProvider
+            wifiProvider: wifiProvider,
+            placeStore: placeStore
         )
 
         let place = try await service.register(
@@ -95,9 +101,13 @@ struct PlaceRegistrationServiceTests {
             longitude: 127.0
         )
 
+        let placeStore = MockPlaceStore()
+        let wifiProvider = MockWiFiProvider()
+
         let service = PlaceRegistrationService(
             locationProvider: locationProvider,
-            wifiProvider: MockWiFiProvider()
+            wifiProvider: wifiProvider,
+            placeStore: placeStore
         )
 
         let place = try await service.register(
@@ -115,9 +125,12 @@ struct PlaceRegistrationServiceTests {
         let locationProvider = MockLocationProvider()
         let wifiProvider = MockWiFiProvider()
 
+        let placeStore = MockPlaceStore()
+
         let service = PlaceRegistrationService(
             locationProvider: locationProvider,
-            wifiProvider: wifiProvider
+            wifiProvider: wifiProvider,
+            placeStore: placeStore
         )
 
         do {
@@ -142,6 +155,76 @@ struct PlaceRegistrationServiceTests {
 
         #expect(
             wifiProvider.currentNetworkCallCount == 0
+        )
+    }
+    
+    @Test
+    func savesRegisteredPlace() async throws {
+        let locationProvider = MockLocationProvider()
+
+        locationProvider.locationPoint = makeLocationPoint(
+            latitude: 37.5665,
+            longitude: 126.9780
+        )
+
+        let wifiProvider = MockWiFiProvider(
+            network: WiFiNetwork(
+                ssid: "GYM_WIFI",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            )
+        )
+
+        let placeStore = MockPlaceStore()
+
+        let service = PlaceRegistrationService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: placeStore
+        )
+
+        let place = try await service.register(
+            name: "헬스장"
+        )
+
+        #expect(
+            await placeStore.savedPlaceCount() == 1
+        )
+
+        #expect(
+            await placeStore.lastSavedPlace() == place
+        )
+    }
+    
+    @Test
+    func doesNotSaveInvalidPlaceName() async {
+        let locationProvider = MockLocationProvider()
+        let wifiProvider = MockWiFiProvider()
+        let placeStore = MockPlaceStore()
+
+        let service = PlaceRegistrationService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: placeStore
+        )
+
+        do {
+            _ = try await service.register(
+                name: ""
+            )
+
+            Issue.record(
+                "Expected emptyName error"
+            )
+        } catch let error as PlaceRegistrationError {
+            #expect(error == .emptyName)
+        } catch {
+            Issue.record(
+                "Unexpected error: \(error)"
+            )
+        }
+
+        #expect(
+            await placeStore.savedPlaceCount() == 0
         )
     }
 }
