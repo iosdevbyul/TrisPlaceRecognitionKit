@@ -15,15 +15,18 @@ public final class PlaceRecognitionService {
     private let locationProvider: any LocationProviding
     private let wifiProvider: any WiFiProviding
     private let placeStore: any PlaceStoring
-
+    private let locationQualityPolicy: PlaceLocationQualityPolicy
+    
     public init(
         locationProvider: any LocationProviding,
         wifiProvider: any WiFiProviding,
-        placeStore: any PlaceStoring
+        placeStore: any PlaceStoring,
+        locationQualityPolicy: PlaceLocationQualityPolicy = .init()
     ) {
         self.locationProvider = locationProvider
         self.wifiProvider = wifiProvider
         self.placeStore = placeStore
+        self.locationQualityPolicy = locationQualityPolicy
     }
 
     // Preserve the existing GPS-constrained behavior.
@@ -37,8 +40,10 @@ public final class PlaceRecognitionService {
         let currentLocation = try await locationProvider
             .requestCurrentLocation()
 
-        guard currentLocation.horizontalAccuracy.isFinite,
-              currentLocation.horizontalAccuracy >= 0 else {
+        guard PlaceLocationQualityValidator.isAcceptable(
+            currentLocation,
+            policy: locationQualityPolicy
+        ) else {
             return []
         }
 
@@ -46,7 +51,10 @@ public final class PlaceRecognitionService {
 
         let recognizedPlaces = places.compactMap { place
             -> RecognizedPlace? in
-
+            guard currentLocation.horizontalAccuracy
+                    <= place.location.recognitionRadius else {
+                return nil
+            }
             guard let distance = PlaceProximityMatcher.distanceMeters(
                 latitude: currentLocation.latitude,
                 longitude: currentLocation.longitude,
@@ -176,14 +184,19 @@ private extension PlaceRecognitionService {
         let currentLocation = try await locationProvider
             .requestCurrentLocation()
 
-        guard currentLocation.horizontalAccuracy.isFinite,
-              currentLocation.horizontalAccuracy >= 0 else {
+        guard PlaceLocationQualityValidator.isAcceptable(
+            currentLocation,
+            policy: locationQualityPolicy
+        ) else {
             return []
         }
 
         let gpsMatches = gpsOnlyPlaces.compactMap { place
             -> RecognizedPlace? in
-
+            guard currentLocation.horizontalAccuracy
+                    <= place.location.recognitionRadius else {
+                return nil
+            }
             guard let distance = PlaceProximityMatcher.distanceMeters(
                 latitude: currentLocation.latitude,
                 longitude: currentLocation.longitude,
