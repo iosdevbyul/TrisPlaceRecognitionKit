@@ -15,13 +15,21 @@ actor LegacyPlaceMigrator {
     private let targetStore: any PlaceStoring
 
     private let markerURL: URL
+    
+    private let receiptStore: (
+        any PlaceMigrationReceiptStoring
+    )?
 
     init(
         legacyFileURL: URL,
-        targetStore: any PlaceStoring
+        targetStore: any PlaceStoring,
+        receiptStore: (
+            any PlaceMigrationReceiptStoring
+        )? = nil
     ) {
         self.legacyFileURL = legacyFileURL
         self.targetStore = targetStore
+        self.receiptStore = receiptStore
 
         self.markerURL = Self.markerURL(
             for: legacyFileURL
@@ -52,6 +60,10 @@ actor LegacyPlaceMigrator {
         let fingerprint = makeFingerprint(
             for: originalData
         )
+        
+        let sourcePath = legacyFileURL
+            .standardizedFileURL
+            .path
 
         if FileManager.default.fileExists(
             atPath: markerURL.path
@@ -65,7 +77,23 @@ actor LegacyPlaceMigrator {
                 throw PlaceMigrationError.legacyFileChanged
             }
 
-            return
+            if let receiptStore {
+                if let storedFingerprint =
+                    try await receiptStore.migrationFingerprint(
+                        for: sourcePath
+                    ) {
+                    guard storedFingerprint == fingerprint else {
+                        throw PlaceMigrationError.verificationFailed
+                    }
+
+                    return
+                }
+
+                // Marker exists, but the destination has no receipt.
+                // Re-run migration using the preserved JSON file.
+            } else {
+                return
+            }
         }
 
         let legacyPlaces = try JSONDecoder().decode(
@@ -129,6 +157,13 @@ actor LegacyPlaceMigrator {
 
         guard currentData == originalData else {
             throw PlaceMigrationError.legacyFileChanged
+        }
+        
+        if let receiptStore {
+            try await receiptStore.recordMigration(
+                for: sourcePath,
+                fingerprint: fingerprint
+            )
         }
 
         // Record completion only after all verification succeeds.

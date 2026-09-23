@@ -9,7 +9,9 @@ import Foundation
 import SwiftData
 
 @available(iOS 17.0, *)
-public actor SwiftDataPlaceStore: PlaceStoring {
+public actor SwiftDataPlaceStore:
+    PlaceStoring,
+    PlaceMigrationReceiptStoring {
 
     private let modelContainer: ModelContainer
 
@@ -21,7 +23,8 @@ public actor SwiftDataPlaceStore: PlaceStoring {
 
     public init() throws {
         let schema = Schema([
-            SwiftDataPlaceModel.self
+            SwiftDataPlaceModel.self,
+            SwiftDataPlaceMigrationReceipt.self
         ])
 
         let configuration = ModelConfiguration(
@@ -146,5 +149,62 @@ private extension SwiftDataPlaceStore {
                 bssid: model.bssid
             )
         )
+    }
+}
+
+
+@available(iOS 17.0, *)
+extension SwiftDataPlaceStore {
+
+    func migrationFingerprint(
+        for sourcePath: String
+    ) async throws -> String? {
+        let context = ModelContext(modelContainer)
+
+        let path = sourcePath
+
+        let descriptor = FetchDescriptor<
+            SwiftDataPlaceMigrationReceipt
+        >(
+            predicate: #Predicate {
+                $0.sourcePath == path
+            }
+        )
+
+        return try context.fetch(
+            descriptor
+        ).first?.fingerprint
+    }
+
+    func recordMigration(
+        for sourcePath: String,
+        fingerprint: String
+    ) async throws {
+        let context = ModelContext(modelContainer)
+
+        let path = sourcePath
+
+        let descriptor = FetchDescriptor<
+            SwiftDataPlaceMigrationReceipt
+        >(
+            predicate: #Predicate {
+                $0.sourcePath == path
+            }
+        )
+
+        if let existing = try context.fetch(
+            descriptor
+        ).first {
+            existing.fingerprint = fingerprint
+        } else {
+            context.insert(
+                SwiftDataPlaceMigrationReceipt(
+                    sourcePath: sourcePath,
+                    fingerprint: fingerprint
+                )
+            )
+        }
+
+        try context.save()
     }
 }

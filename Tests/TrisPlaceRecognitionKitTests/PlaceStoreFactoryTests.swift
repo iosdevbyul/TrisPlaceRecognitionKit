@@ -405,6 +405,85 @@ private extension PlaceStoreFactoryTests {
             )
         )
     }
+    
+    
+    @Test
+    func restoresPlacesWhenSwiftDataWasReset() async throws {
+        guard #available(iOS 17.0, *) else {
+            return
+        }
+
+        let fileURL = makeTemporaryFileURL()
+
+        defer {
+            removeTemporaryDirectory(for: fileURL)
+        }
+
+        let gym = try makePlace(name: "헬스장")
+
+        try writePlaces(
+            [gym],
+            to: fileURL
+        )
+
+        let originalStore = try makeSwiftDataStore()
+
+        _ = try await PlaceStoreFactory.makeStore(
+            legacyFileURL: fileURL,
+            swiftDataStore: originalStore
+        )
+
+        // Simulate a lost SwiftData database.
+        // The legacy JSON and its marker still exist.
+        let resetStore = try makeSwiftDataStore()
+
+        let restoredStore = try await PlaceStoreFactory.makeStore(
+            legacyFileURL: fileURL,
+            swiftDataStore: resetStore
+        )
+
+        let restoredPlaces = try await restoredStore.fetchAll()
+
+        #expect(restoredPlaces == [gym])
+    }
+
+    @Test
+    func doesNotRestoreIntentionallyDeletedPlaces() async throws {
+        guard #available(iOS 17.0, *) else {
+            return
+        }
+
+        let fileURL = makeTemporaryFileURL()
+
+        defer {
+            removeTemporaryDirectory(for: fileURL)
+        }
+
+        let gym = try makePlace(name: "헬스장")
+
+        try writePlaces(
+            [gym],
+            to: fileURL
+        )
+
+        let targetStore = try makeSwiftDataStore()
+
+        let store = try await PlaceStoreFactory.makeStore(
+            legacyFileURL: fileURL,
+            swiftDataStore: targetStore
+        )
+
+        try await store.delete(id: gym.id)
+
+        let reopenedStore = try await PlaceStoreFactory.makeStore(
+            legacyFileURL: fileURL,
+            swiftDataStore: targetStore
+        )
+
+        let places = try await reopenedStore.fetchAll()
+
+        #expect(places.isEmpty)
+    }
 }
 
 @available(iOS 17.0, *)
@@ -412,7 +491,8 @@ private extension PlaceStoreFactoryTests {
 
     func makeSwiftDataStore() throws -> SwiftDataPlaceStore {
         let schema = Schema([
-            SwiftDataPlaceModel.self
+            SwiftDataPlaceModel.self,
+            SwiftDataPlaceMigrationReceipt.self
         ])
 
         let configuration = ModelConfiguration(

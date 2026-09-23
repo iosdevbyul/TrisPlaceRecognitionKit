@@ -42,7 +42,7 @@ extension PlaceStoreFactory {
     @available(iOS 17.0, *)
     static func makeStore(
         legacyFileURL: URL,
-        swiftDataStore: any PlaceStoring
+        swiftDataStore: SwiftDataPlaceStore
     ) async throws -> any PlaceStoring {
 
         guard FileManager.default.fileExists(
@@ -53,7 +53,8 @@ extension PlaceStoreFactory {
 
         let migrator = LegacyPlaceMigrator(
             legacyFileURL: legacyFileURL,
-            targetStore: swiftDataStore
+            targetStore: swiftDataStore,
+            receiptStore: swiftDataStore
         )
 
         try await migrator.migrate()
