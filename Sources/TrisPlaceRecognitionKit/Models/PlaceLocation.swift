@@ -7,7 +7,8 @@
 
 public struct PlaceLocation: Sendable,
                              Equatable,
-                             Hashable {
+                             Hashable,
+                             Codable {
 
     public let latitude: Double
     public let longitude: Double

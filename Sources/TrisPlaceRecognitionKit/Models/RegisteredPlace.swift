@@ -10,7 +10,8 @@ import Foundation
 public struct RegisteredPlace: Identifiable,
                                Sendable,
                                Equatable,
-                               Hashable {
+                               Hashable,
+                               Codable {
 
     public let id: UUID
 

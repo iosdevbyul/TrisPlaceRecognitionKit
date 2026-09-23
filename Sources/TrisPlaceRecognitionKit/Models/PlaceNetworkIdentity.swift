@@ -7,7 +7,8 @@
 
 public struct PlaceNetworkIdentity: Sendable,
                                     Equatable,
-                                    Hashable {
+                                    Hashable,
+                                    Codable {
 
     public let ssid: String?
     public let bssid: String?
