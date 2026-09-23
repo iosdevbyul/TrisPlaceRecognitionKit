@@ -15,12 +15,12 @@ public enum PlaceRecognitionEvidence: Sendable, Equatable {
 public struct RecognizedPlace: Sendable, Equatable {
 
     public let place: RegisteredPlace
-    public let distanceMeters: Double
+    public let distanceMeters: Double?
     public let evidence: PlaceRecognitionEvidence
 
     public init(
         place: RegisteredPlace,
-        distanceMeters: Double,
+        distanceMeters: Double?,
         evidence: PlaceRecognitionEvidence
     ) {
         self.place = place

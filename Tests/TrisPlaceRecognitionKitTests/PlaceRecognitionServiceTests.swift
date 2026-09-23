@@ -206,6 +206,170 @@ struct PlaceRecognitionServiceTests {
         #expect(locationProvider.requestCurrentLocationCallCount == 0)
         #expect(wifiProvider.currentNetworkCallCount == 0)
     }
+    
+    
+    @Test
+    func wifiFirstRecognizesGymWithoutRequestingGPS() async throws {
+        let locationProvider = MockLocationProvider()
+
+        let wifiProvider = MockWiFiProvider(
+            network: WiFiNetwork(
+                ssid: "GYM_WIFI",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            )
+        )
+
+        let store = MockPlaceStore()
+
+        let gym = try makePlace(
+            name: "헬스장",
+            latitude: 37.5700,
+            ssid: "GYM_WIFI",
+            bssid: "AA:BB:CC:DD:EE:FF"
+        )
+
+        try await store.save(gym)
+
+        let service = PlaceRecognitionService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: store
+        )
+
+        let results = try await service.recognizeCurrentPlaces(
+            policy: .wifiFirst
+        )
+
+        #expect(results.count == 1)
+        #expect(results.first?.place.id == gym.id)
+        #expect(results.first?.evidence == .bssid)
+        #expect(results.first?.distanceMeters == nil)
+
+        #expect(
+            locationProvider.requestCurrentLocationCallCount == 0
+        )
+    }
+
+    @Test
+    func wifiFirstUsesGPSForPlacesWithoutWiFi() async throws {
+        let locationProvider = makeLocationProvider()
+        let wifiProvider = MockWiFiProvider()
+        let store = MockPlaceStore()
+
+        let park = try makePlace(
+            name: "공원",
+            latitude: 37.5665
+        )
+
+        try await store.save(park)
+
+        let service = PlaceRecognitionService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: store
+        )
+
+        let results = try await service.recognizeCurrentPlaces(
+            policy: .wifiFirst
+        )
+
+        #expect(results.count == 1)
+        #expect(results.first?.place.id == park.id)
+        #expect(
+            results.first?.evidence == .gpsOnlyNoWiFiConfigured
+        )
+        #expect(results.first?.distanceMeters != nil)
+
+        #expect(
+            locationProvider.requestCurrentLocationCallCount == 1
+        )
+
+        #expect(
+            wifiProvider.currentNetworkCallCount == 0
+        )
+    }
+
+    @Test
+    func wifiFirstDoesNotFallbackToGPSForConfiguredWiFi() async throws {
+        let locationProvider = makeLocationProvider()
+        let wifiProvider = MockWiFiProvider()
+        let store = MockPlaceStore()
+
+        let gym = try makePlace(
+            name: "헬스장",
+            latitude: 37.5665,
+            ssid: "GYM_WIFI",
+            bssid: "AA:BB:CC:DD:EE:FF"
+        )
+
+        try await store.save(gym)
+
+        let service = PlaceRecognitionService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: store
+        )
+
+        let results = try await service.recognizeCurrentPlaces(
+            policy: .wifiFirst
+        )
+
+        #expect(results.isEmpty)
+
+        #expect(
+            locationProvider.requestCurrentLocationCallCount == 0
+        )
+
+        #expect(
+            wifiProvider.currentNetworkCallCount == 1
+        )
+    }
+
+    @Test
+    func wifiFirstPrioritizesWiFiOverGPSOnlyPlaces() async throws {
+        let locationProvider = MockLocationProvider()
+
+        let wifiProvider = MockWiFiProvider(
+            network: WiFiNetwork(
+                ssid: "GYM_WIFI",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            )
+        )
+
+        let store = MockPlaceStore()
+
+        let gym = try makePlace(
+            name: "헬스장",
+            latitude: 37.5700,
+            ssid: "GYM_WIFI",
+            bssid: "AA:BB:CC:DD:EE:FF"
+        )
+
+        let park = try makePlace(
+            name: "공원",
+            latitude: 37.5665
+        )
+
+        try await store.save(gym)
+        try await store.save(park)
+
+        let service = PlaceRecognitionService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: store
+        )
+
+        let results = try await service.recognizeCurrentPlaces(
+            policy: .wifiFirst
+        )
+
+        #expect(results.count == 1)
+        #expect(results.first?.place.id == gym.id)
+
+        #expect(
+            locationProvider.requestCurrentLocationCallCount == 0
+        )
+    }
 }
 
 private extension PlaceRecognitionServiceTests {
