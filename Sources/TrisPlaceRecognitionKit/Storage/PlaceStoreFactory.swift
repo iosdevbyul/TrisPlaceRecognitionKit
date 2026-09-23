@@ -5,19 +5,15 @@
 //  Created by COMATOKI on 2026-09-24.
 //
 
-import Foundation
 
-enum PlaceStoreBackend: Equatable {
-    case file
-    case swiftData
-}
+import Foundation
 
 public enum PlaceStoreFactory {
 
-    public static func makeDefaultStore() throws -> any PlaceStoring {
+    public static func makeDefaultStore() async throws -> any PlaceStoring {
         let legacyFileURL = try FilePlaceStore.defaultFileURL()
 
-        return try makeStore(
+        return try await makeStore(
             legacyFileURL: legacyFileURL
         )
     }
@@ -27,27 +23,15 @@ extension PlaceStoreFactory {
 
     static func makeStore(
         legacyFileURL: URL
-    ) throws -> any PlaceStoring {
-        let supportsSwiftData: Bool
+    ) async throws -> any PlaceStoring {
 
         if #available(iOS 17.0, *) {
-            supportsSwiftData = true
-        } else {
-            supportsSwiftData = false
-        }
+            let swiftDataStore = try SwiftDataPlaceStore()
 
-        let legacyFileExists = FileManager.default.fileExists(
-            atPath: legacyFileURL.path
-        )
-
-        let backend = try selectBackend(
-            supportsSwiftData: supportsSwiftData,
-            legacyFileExists: legacyFileExists
-        )
-
-        if #available(iOS 17.0, *),
-           backend == .swiftData {
-            return try SwiftDataPlaceStore()
+            return try await makeStore(
+                legacyFileURL: legacyFileURL,
+                swiftDataStore: swiftDataStore
+            )
         }
 
         return FilePlaceStore(
@@ -55,18 +39,25 @@ extension PlaceStoreFactory {
         )
     }
 
-    static func selectBackend(
-        supportsSwiftData: Bool,
-        legacyFileExists: Bool
-    ) throws -> PlaceStoreBackend {
-        guard supportsSwiftData else {
-            return .file
+    @available(iOS 17.0, *)
+    static func makeStore(
+        legacyFileURL: URL,
+        swiftDataStore: any PlaceStoring
+    ) async throws -> any PlaceStoring {
+
+        guard FileManager.default.fileExists(
+            atPath: legacyFileURL.path
+        ) else {
+            return swiftDataStore
         }
 
-        guard !legacyFileExists else {
-            throw PlaceStoreFactoryError.migrationRequired
-        }
+        let migrator = LegacyPlaceMigrator(
+            legacyFileURL: legacyFileURL,
+            targetStore: swiftDataStore
+        )
 
-        return .swiftData
+        try await migrator.migrate()
+
+        return swiftDataStore
     }
 }
