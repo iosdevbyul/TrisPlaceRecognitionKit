@@ -65,7 +65,7 @@ public final class PlaceRecognitionService {
             }
 
             let wiFiMatch = PlaceWiFiMatcher.match(
-                registered: place.networkIdentity,
+                registered: place.networkIdentities,
                 current: currentWiFi
             )
 
@@ -124,10 +124,7 @@ private extension PlaceRecognitionService {
         // Only request Wi-Fi information if at least one
         // registered place has a Wi-Fi identity.
         let hasWiFiPlaces = places.contains { place in
-            PlaceWiFiMatcher.match(
-                registered: place.networkIdentity,
-                current: nil
-            ) != .notConfigured
+            !place.networkIdentities.isEmpty
         }
 
         if hasWiFiPlaces {
@@ -137,7 +134,7 @@ private extension PlaceRecognitionService {
                 -> RecognizedPlace? in
 
                 let match = PlaceWiFiMatcher.match(
-                    registered: place.networkIdentity,
+                    registered: place.networkIdentities,
                     current: currentWiFi
                 )
 
@@ -171,10 +168,7 @@ private extension PlaceRecognitionService {
 
         // GPS is only used for places registered without Wi-Fi.
         let gpsOnlyPlaces = places.filter { place in
-            PlaceWiFiMatcher.match(
-                registered: place.networkIdentity,
-                current: nil
-            ) == .notConfigured
+            place.networkIdentities.isEmpty
         }
 
         guard !gpsOnlyPlaces.isEmpty else {

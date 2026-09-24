@@ -370,6 +370,107 @@ struct PlaceRecognitionServiceTests {
             locationProvider.requestCurrentLocationCallCount == 0
         )
     }
+    
+    @Test
+    func wifiFirstRecognizesAdditionalNetworkWithoutGPS() async throws {
+        let locationProvider = MockLocationProvider()
+
+        let wifiProvider = MockWiFiProvider(
+            network: WiFiNetwork(
+                ssid: "GYM_SECOND",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            )
+        )
+
+        let store = MockPlaceStore()
+
+        let gym = RegisteredPlace(
+            name: try PlaceName("헬스장"),
+            location: PlaceLocation(
+                latitude: 37.5665,
+                longitude: 126.9780,
+                recognitionRadius: 100
+            ),
+            networkIdentity: PlaceNetworkIdentity(
+                ssid: "GYM_MAIN",
+                bssid: "11:22:33:44:55:66"
+            ),
+            additionalNetworkIdentities: [
+                PlaceNetworkIdentity(
+                    ssid: "GYM_SECOND",
+                    bssid: "AA:BB:CC:DD:EE:FF"
+                )
+            ]
+        )
+
+        try await store.save(gym)
+
+        let service = PlaceRecognitionService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: store
+        )
+
+        let results = try await service.recognizeCurrentPlaces(
+            policy: .wifiFirst
+        )
+
+        #expect(results.count == 1)
+        #expect(results.first?.place.id == gym.id)
+        #expect(results.first?.evidence == .bssid)
+
+        #expect(
+            locationProvider.requestCurrentLocationCallCount == 0
+        )
+    }
+
+    @Test
+    func additionalNetworkPreventsGPSOnlyRecognition() async throws {
+        let locationProvider = makeLocationProvider()
+        let wifiProvider = MockWiFiProvider()
+        let store = MockPlaceStore()
+
+        let gym = RegisteredPlace(
+            name: try PlaceName("헬스장"),
+            location: PlaceLocation(
+                latitude: 37.5665,
+                longitude: 126.9780,
+                recognitionRadius: 100
+            ),
+            networkIdentity: PlaceNetworkIdentity(
+                ssid: nil,
+                bssid: nil
+            ),
+            additionalNetworkIdentities: [
+                PlaceNetworkIdentity(
+                    ssid: "GYM_WIFI",
+                    bssid: nil
+                )
+            ]
+        )
+
+        try await store.save(gym)
+
+        let service = PlaceRecognitionService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: store
+        )
+
+        let results = try await service.recognizeCurrentPlaces(
+            policy: .wifiFirst
+        )
+
+        #expect(results.isEmpty)
+
+        #expect(
+            locationProvider.requestCurrentLocationCallCount == 0
+        )
+
+        #expect(
+            wifiProvider.currentNetworkCallCount == 1
+        )
+    }
 }
 
 private extension PlaceRecognitionServiceTests {

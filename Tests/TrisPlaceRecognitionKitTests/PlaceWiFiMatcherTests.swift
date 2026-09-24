@@ -181,4 +181,56 @@ struct PlaceWiFiMatcherTests {
 
         #expect(result == .notConfigured)
     }
+    
+    @Test
+    func matchesAdditionalNetwork() {
+        let identities = [
+            PlaceNetworkIdentity(
+                ssid: "GYM_MAIN",
+                bssid: "11:22:33:44:55:66"
+            ),
+            PlaceNetworkIdentity(
+                ssid: "GYM_SECOND",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            )
+        ]
+
+        let current = WiFiNetwork(
+            ssid: "GYM_SECOND",
+            bssid: "AA:BB:CC:DD:EE:FF"
+        )
+
+        let result = PlaceWiFiMatcher.match(
+            registered: identities,
+            current: current
+        )
+
+        #expect(result == .bssid)
+    }
+
+    @Test
+    func prefersAdditionalBSSIDOverPrimarySSID() {
+        let identities = [
+            PlaceNetworkIdentity(
+                ssid: "GYM_WIFI",
+                bssid: "11:22:33:44:55:66"
+            ),
+            PlaceNetworkIdentity(
+                ssid: "GYM_OTHER",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            )
+        ]
+
+        let current = WiFiNetwork(
+            ssid: "GYM_WIFI",
+            bssid: "AA:BB:CC:DD:EE:FF"
+        )
+
+        let result = PlaceWiFiMatcher.match(
+            registered: identities,
+            current: current
+        )
+
+        #expect(result == .bssid)
+    }
 }
