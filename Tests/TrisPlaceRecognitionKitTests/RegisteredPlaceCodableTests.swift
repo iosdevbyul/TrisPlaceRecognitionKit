@@ -100,4 +100,67 @@ struct RegisteredPlaceCodableTests {
 
         #expect(decoded.value == "헬스장")
     }
+    
+    @Test
+    func decodesLegacyPlaceWithoutAdditionalNetworks() throws {
+        let legacyJSON = """
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "헬스장",
+            "location": {
+                "latitude": 37.5665,
+                "longitude": 126.978,
+                "recognitionRadius": 100
+            },
+            "networkIdentity": {
+                "ssid": "GYM_WIFI",
+                "bssid": "AA:BB:CC:DD:EE:FF"
+            }
+        }
+        """
+
+        let place = try JSONDecoder().decode(
+            RegisteredPlace.self,
+            from: Data(legacyJSON.utf8)
+        )
+
+        #expect(place.additionalNetworkIdentities.isEmpty)
+        #expect(place.networkIdentities.count == 1)
+    }
+
+    @Test
+    func encodesAndDecodesMultipleNetworks() throws {
+        let place = RegisteredPlace(
+            name: try PlaceName("헬스장"),
+            location: PlaceLocation(
+                latitude: 37.5665,
+                longitude: 126.9780,
+                recognitionRadius: 100
+            ),
+            networkIdentity: PlaceNetworkIdentity(
+                ssid: "GYM_WIFI",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            ),
+            additionalNetworkIdentities: [
+                PlaceNetworkIdentity(
+                    ssid: "GYM_WIFI",
+                    bssid: "11:22:33:44:55:66"
+                ),
+                PlaceNetworkIdentity(
+                    ssid: "GYM_GUEST",
+                    bssid: nil
+                )
+            ]
+        )
+
+        let data = try JSONEncoder().encode(place)
+
+        let restored = try JSONDecoder().decode(
+            RegisteredPlace.self,
+            from: data
+        )
+
+        #expect(restored == place)
+        #expect(restored.networkIdentities.count == 3)
+    }
 }

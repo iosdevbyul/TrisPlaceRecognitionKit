@@ -43,6 +43,13 @@ public actor SwiftDataPlaceStore:
         let context = ModelContext(
             modelContainer
         )
+        
+        let additionalNetworksData =
+            place.additionalNetworkIdentities.isEmpty
+                ? nil
+                : try JSONEncoder().encode(
+                    place.additionalNetworkIdentities
+                )
 
         let placeID = place.id
 
@@ -64,6 +71,7 @@ public actor SwiftDataPlaceStore:
                 place.networkIdentity.ssid
             existing.bssid =
                 place.networkIdentity.bssid
+            existing.additionalNetworksData = additionalNetworksData
         } else {
             let model = SwiftDataPlaceModel(
                 id: place.id,
@@ -73,7 +81,8 @@ public actor SwiftDataPlaceStore:
                 recognitionRadius:
                     place.location.recognitionRadius,
                 ssid: place.networkIdentity.ssid,
-                bssid: place.networkIdentity.bssid
+                bssid: place.networkIdentity.bssid,
+                additionalNetworksData: additionalNetworksData
             )
 
             context.insert(model)
@@ -133,21 +142,31 @@ private extension SwiftDataPlaceStore {
     func makeRegisteredPlace(
         from model: SwiftDataPlaceModel
     ) throws -> RegisteredPlace {
-        RegisteredPlace(
+
+        let additionalNetworks: [PlaceNetworkIdentity]
+
+        if let data = model.additionalNetworksData {
+            additionalNetworks = try JSONDecoder().decode(
+                [PlaceNetworkIdentity].self,
+                from: data
+            )
+        } else {
+            additionalNetworks = []
+        }
+
+        return RegisteredPlace(
             id: model.id,
-            name: try PlaceName(
-                model.name
-            ),
+            name: try PlaceName(model.name),
             location: PlaceLocation(
                 latitude: model.latitude,
                 longitude: model.longitude,
-                recognitionRadius:
-                    model.recognitionRadius
+                recognitionRadius: model.recognitionRadius
             ),
             networkIdentity: PlaceNetworkIdentity(
                 ssid: model.ssid,
                 bssid: model.bssid
-            )
+            ),
+            additionalNetworkIdentities: additionalNetworks
         )
     }
 }

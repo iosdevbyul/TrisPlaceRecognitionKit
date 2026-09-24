@@ -131,6 +131,38 @@ struct SwiftDataPlaceStoreTests {
             places == [place]
         )
     }
+    
+    @available(iOS 17.0, *)
+    @Test
+    func persistsMultipleWiFiNetworks() async throws {
+        let store = try makeStore()
+
+        let place = RegisteredPlace(
+            name: try PlaceName("헬스장"),
+            location: PlaceLocation(
+                latitude: 37.5665,
+                longitude: 126.9780,
+                recognitionRadius: 100
+            ),
+            networkIdentity: PlaceNetworkIdentity(
+                ssid: "GYM_WIFI",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            ),
+            additionalNetworkIdentities: [
+                PlaceNetworkIdentity(
+                    ssid: "GYM_WIFI",
+                    bssid: "11:22:33:44:55:66"
+                )
+            ]
+        )
+
+        try await store.save(place)
+
+        let restored = try await store.fetchAll()
+
+        #expect(restored == [place])
+        #expect(restored.first?.networkIdentities.count == 2)
+    }
 }
 
 @available(iOS 17.0, *)
