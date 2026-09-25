@@ -34,13 +34,12 @@ public final class PlaceManagementService {
         to name: String
     ) async throws -> RegisteredPlace {
         let validatedName = try PlaceName(name)
-        let place = try await findPlace(id: id)
 
-        return try await save(
-            place: place,
-            name: validatedName,
-            location: place.location
-        )
+        return try await updateExisting(id: id) { place in
+            var updated = place
+            updated.name = validatedName
+            return updated
+        }
     }
 
     public func updateRecognitionRadius(
@@ -51,26 +50,27 @@ public final class PlaceManagementService {
             throw PlaceManagementError.invalidRecognitionRadius
         }
 
-        let place = try await findPlace(id: id)
+        return try await updateExisting(id: id) { place in
+            let location = PlaceLocation(
+                latitude: place.location.latitude,
+                longitude: place.location.longitude,
+                recognitionRadius: radius
+            )
 
-        let updatedLocation = PlaceLocation(
-            latitude: place.location.latitude,
-            longitude: place.location.longitude,
-            recognitionRadius: radius
-        )
-
-        return try await save(
-            place: place,
-            name: place.name,
-            location: updatedLocation
-        )
+            return RegisteredPlace(
+                id: place.id,
+                name: place.name,
+                location: location,
+                networkIdentity: place.networkIdentity,
+                additionalNetworkIdentities:
+                    place.additionalNetworkIdentities
+            )
+        }
     }
 
     public func updateCurrentLocation(
         for id: UUID
     ) async throws -> RegisteredPlace {
-        let place = try await findPlace(id: id)
-
         let current = try await locationProvider
             .requestCurrentLocation()
 
@@ -78,8 +78,6 @@ public final class PlaceManagementService {
             current,
             policy: locationQualityPolicy
         ),
-        current.horizontalAccuracy
-            <= place.location.recognitionRadius,
         current.latitude.isFinite,
         current.longitude.isFinite,
         (-90...90).contains(current.latitude),
@@ -87,17 +85,30 @@ public final class PlaceManagementService {
             throw PlaceManagementError.invalidCurrentLocation
         }
 
-        let updatedLocation = PlaceLocation(
-            latitude: current.latitude,
-            longitude: current.longitude,
-            recognitionRadius: place.location.recognitionRadius
-        )
+        let latitude = current.latitude
+        let longitude = current.longitude
+        let accuracy = current.horizontalAccuracy
 
-        return try await save(
-            place: place,
-            name: place.name,
-            location: updatedLocation
-        )
+        return try await updateExisting(id: id) { place in
+            guard accuracy <= place.location.recognitionRadius else {
+                throw PlaceManagementError.invalidCurrentLocation
+            }
+
+            let location = PlaceLocation(
+                latitude: latitude,
+                longitude: longitude,
+                recognitionRadius: place.location.recognitionRadius
+            )
+
+            return RegisteredPlace(
+                id: place.id,
+                name: place.name,
+                location: location,
+                networkIdentity: place.networkIdentity,
+                additionalNetworkIdentities:
+                    place.additionalNetworkIdentities
+            )
+        }
     }
 
     public func deletePlace(
@@ -140,6 +151,20 @@ private extension PlaceManagementService {
         )
 
         try await placeStore.save(updated)
+
+        return updated
+    }
+    
+    func updateExisting(
+        id: UUID,
+        _ transform: @Sendable (RegisteredPlace) throws -> RegisteredPlace
+    ) async throws -> RegisteredPlace {
+        guard let updated = try await placeStore.update(
+            id: id,
+            transform
+        ) else {
+            throw PlaceManagementError.placeNotFound(id)
+        }
 
         return updated
     }

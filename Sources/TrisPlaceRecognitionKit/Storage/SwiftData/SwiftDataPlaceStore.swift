@@ -134,6 +134,52 @@ public actor SwiftDataPlaceStore:
 
         try context.save()
     }
+    
+    public func update(
+        id: UUID,
+        _ transform: @Sendable (RegisteredPlace) throws -> RegisteredPlace
+    ) async throws -> RegisteredPlace? {
+        let context = ModelContext(modelContainer)
+
+        let placeID = id
+
+        let descriptor = FetchDescriptor<SwiftDataPlaceModel>(
+            predicate: #Predicate {
+                $0.id == placeID
+            }
+        )
+
+        guard let model = try context.fetch(descriptor).first else {
+            return nil
+        }
+
+        let original = try makeRegisteredPlace(from: model)
+        let updated = try transform(original)
+
+        guard updated.id == id else {
+            throw PlaceMutationError.identifierChanged
+        }
+
+        let additionalNetworksData =
+            updated.additionalNetworkIdentities.isEmpty
+            ? nil
+            : try JSONEncoder().encode(
+                updated.additionalNetworkIdentities
+            )
+
+        model.name = updated.name.value
+        model.latitude = updated.location.latitude
+        model.longitude = updated.location.longitude
+        model.recognitionRadius = updated.location.recognitionRadius
+
+        model.ssid = updated.networkIdentity.ssid
+        model.bssid = updated.networkIdentity.bssid
+        model.additionalNetworksData = additionalNetworksData
+
+        try context.save()
+
+        return updated
+    }
 }
 
 @available(iOS 17.0, *)

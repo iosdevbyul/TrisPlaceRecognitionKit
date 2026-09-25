@@ -7,6 +7,10 @@
 
 import Foundation
 
+public enum PlaceMutationError: Error, Sendable, Equatable {
+    case identifierChanged
+}
+
 public protocol PlaceStoring: Sendable {
 
     func save(
@@ -18,4 +22,9 @@ public protocol PlaceStoring: Sendable {
     func delete(
         id: UUID
     ) async throws
+
+    func update(
+        id: UUID,
+        _ transform: @Sendable (RegisteredPlace) throws -> RegisteredPlace
+    ) async throws -> RegisteredPlace?
 }

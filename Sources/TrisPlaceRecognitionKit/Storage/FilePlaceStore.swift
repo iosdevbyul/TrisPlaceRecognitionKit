@@ -70,6 +70,31 @@ public actor FilePlaceStore: PlaceStoring {
 
         try persist(places)
     }
+    
+    public func update(
+        id: UUID,
+        _ transform: @Sendable (RegisteredPlace) throws -> RegisteredPlace
+    ) async throws -> RegisteredPlace? {
+        var places = try loadPlaces()
+
+        guard let index = places.firstIndex(where: {
+            $0.id == id
+        }) else {
+            return nil
+        }
+
+        let updated = try transform(places[index])
+
+        guard updated.id == id else {
+            throw PlaceMutationError.identifierChanged
+        }
+
+        places[index] = updated
+
+        try persist(places)
+
+        return updated
+    }
 }
 
 private extension FilePlaceStore {

@@ -25,7 +25,9 @@ public final class PlaceNetworkManagementService {
     public func addCurrentNetwork(
         to placeID: UUID
     ) async throws -> RegisteredPlace {
-        let place = try await findPlace(id: placeID)
+        // Preserve the existing behavior:
+        // do not request Wi-Fi for an unknown place.
+        _ = try await findPlace(id: placeID)
 
         guard let current = await wifiProvider.currentNetwork(),
               !current.ssid.trimmingCharacters(
@@ -35,52 +37,71 @@ public final class PlaceNetworkManagementService {
         }
 
         let bssid = current.bssid?
-            .trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         let identity = PlaceNetworkIdentity(
             ssid: current.ssid,
             bssid: bssid?.isEmpty == false ? bssid : nil
         )
 
-        var networks = place.networkIdentities
+        guard let updated = try await placeStore.update(
+            id: placeID,
+            { place in
+                var networks = place.networkIdentities
 
-        // Re-registering the same access point is idempotent.
-        if networks.contains(where: {
-            isSameNetwork($0, identity)
-        }) {
-            return place
+                if networks.contains(where: {
+                    PlaceNetworkMutation.isSameNetwork(
+                        $0,
+                        identity
+                    )
+                }) {
+                    return place
+                }
+
+                networks.append(identity)
+
+                return PlaceNetworkMutation.replacingNetworks(
+                    in: place,
+                    with: networks
+                )
+            }
+        ) else {
+            throw PlaceNetworkManagementError.placeNotFound(placeID)
         }
 
-        networks.append(identity)
-
-        return try await save(
-            place: place,
-            networks: networks
-        )
+        return updated
     }
 
     public func removeNetwork(
         _ network: PlaceNetworkIdentity,
         from placeID: UUID
     ) async throws -> RegisteredPlace {
-        let place = try await findPlace(id: placeID)
+        guard let updated = try await placeStore.update(
+            id: placeID,
+            { place in
+                var networks = place.networkIdentities
 
-        var networks = place.networkIdentities
+                guard let index = networks.firstIndex(where: {
+                    PlaceNetworkMutation.isSameNetwork(
+                        $0,
+                        network
+                    )
+                }) else {
+                    throw PlaceNetworkManagementError.networkNotRegistered
+                }
 
-        guard let index = networks.firstIndex(where: {
-            isSameNetwork($0, network)
-        }) else {
-            throw PlaceNetworkManagementError.networkNotRegistered
+                networks.remove(at: index)
+
+                return PlaceNetworkMutation.replacingNetworks(
+                    in: place,
+                    with: networks
+                )
+            }
+        ) else {
+            throw PlaceNetworkManagementError.placeNotFound(placeID)
         }
 
-        networks.remove(at: index)
-
-        return try await save(
-            place: place,
-            networks: networks
-        )
+        return updated
     }
 }
 
@@ -100,54 +121,49 @@ private extension PlaceNetworkManagementService {
         return place
     }
 
-    func save(
-        place: RegisteredPlace,
-        networks: [PlaceNetworkIdentity]
-    ) async throws -> RegisteredPlace {
-        let primary = networks.first
-            ?? PlaceNetworkIdentity(
-                ssid: nil,
-                bssid: nil
+    private enum PlaceNetworkMutation {
+
+        static func replacingNetworks(
+            in place: RegisteredPlace,
+            with networks: [PlaceNetworkIdentity]
+        ) -> RegisteredPlace {
+            let primary = networks.first
+                ?? PlaceNetworkIdentity(
+                    ssid: nil,
+                    bssid: nil
+                )
+
+            return RegisteredPlace(
+                id: place.id,
+                name: place.name,
+                location: place.location,
+                networkIdentity: primary,
+                additionalNetworkIdentities: Array(
+                    networks.dropFirst()
+                )
             )
-
-        let updated = RegisteredPlace(
-            id: place.id,
-            name: place.name,
-            location: place.location,
-            networkIdentity: primary,
-            additionalNetworkIdentities: Array(
-                networks.dropFirst()
-            )
-        )
-
-        try await placeStore.save(updated)
-
-        return updated
-    }
-
-    func isSameNetwork(
-        _ lhs: PlaceNetworkIdentity,
-        _ rhs: PlaceNetworkIdentity
-    ) -> Bool {
-        let lhsBSSID = lhs.bssid?
-            .trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-
-        let rhsBSSID = rhs.bssid?
-            .trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-
-        if let lhsBSSID,
-           !lhsBSSID.isEmpty,
-           let rhsBSSID,
-           !rhsBSSID.isEmpty {
-            return lhsBSSID.caseInsensitiveCompare(
-                rhsBSSID
-            ) == .orderedSame
         }
 
-        return lhs.ssid == rhs.ssid
+        static func isSameNetwork(
+            _ lhs: PlaceNetworkIdentity,
+            _ rhs: PlaceNetworkIdentity
+        ) -> Bool {
+            let lhsBSSID = lhs.bssid?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let rhsBSSID = rhs.bssid?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let lhsBSSID,
+               !lhsBSSID.isEmpty,
+               let rhsBSSID,
+               !rhsBSSID.isEmpty {
+                return lhsBSSID.caseInsensitiveCompare(
+                    rhsBSSID
+                ) == .orderedSame
+            }
+
+            return lhs.ssid == rhs.ssid
+        }
     }
 }

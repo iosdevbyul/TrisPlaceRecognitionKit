@@ -60,4 +60,33 @@ actor MockPlaceStore: PlaceStoring {
     func lastSavedPlace() -> RegisteredPlace? {
         savedPlaces.last
     }
+    
+    func update(
+        id: UUID,
+        _ transform: @Sendable (RegisteredPlace) throws -> RegisteredPlace
+    ) async throws -> RegisteredPlace? {
+        if let fetchError {
+            throw fetchError
+        }
+
+        guard let index = savedPlaces.firstIndex(where: {
+            $0.id == id
+        }) else {
+            return nil
+        }
+
+        let updated = try transform(savedPlaces[index])
+
+        guard updated.id == id else {
+            throw PlaceMutationError.identifierChanged
+        }
+
+        if let saveError {
+            throw saveError
+        }
+
+        savedPlaces[index] = updated
+
+        return updated
+    }
 }
