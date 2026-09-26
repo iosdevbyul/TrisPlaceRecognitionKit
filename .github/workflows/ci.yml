@@ -200,3 +200,16 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             test
+            
+    
+      - name: Build Demo App
+        run: |
+          set -euo pipefail
+
+          xcodebuild \
+            -project Examples/TrisPlaceRecognitionDemo/TrisPlaceRecognitionDemo.xcodeproj \
+            -scheme TrisPlaceRecognitionDemo \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build

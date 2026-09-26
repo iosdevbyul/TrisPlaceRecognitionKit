@@ -27,7 +27,9 @@ public final class PlaceRegistrationService {
         self.placeStore = placeStore
     }
 
-    public func register(
+    // Creates a candidate without saving it.
+    // The caller can inspect duplicate warnings first.
+    public func prepareRegistration(
         name: String,
         recognitionRadius: Double = defaultRecognitionRadius,
         method: PlaceRegistrationMethod = .automatic
@@ -44,7 +46,8 @@ public final class PlaceRegistrationService {
             network = await wifiProvider.currentNetwork()
 
         case .wifi:
-            guard let currentNetwork = await wifiProvider.currentNetwork(),
+            guard let currentNetwork =
+                    await wifiProvider.currentNetwork(),
                   !currentNetwork.ssid
                     .trimmingCharacters(
                         in: .whitespacesAndNewlines
@@ -70,14 +73,34 @@ public final class PlaceRegistrationService {
             bssid: network?.bssid
         )
 
-        let place = RegisteredPlace(
+        return RegisteredPlace(
             name: placeName,
             location: location,
             networkIdentity: networkIdentity
         )
+    }
 
+    // Saves the exact candidate approved by the user.
+    public func savePrepared(
+        _ place: RegisteredPlace
+    ) async throws -> RegisteredPlace {
         try await placeStore.save(place)
 
         return place
+    }
+
+    // Preserve the existing convenience API.
+    public func register(
+        name: String,
+        recognitionRadius: Double = defaultRecognitionRadius,
+        method: PlaceRegistrationMethod = .automatic
+    ) async throws -> RegisteredPlace {
+        let candidate = try await prepareRegistration(
+            name: name,
+            recognitionRadius: recognitionRadius,
+            method: method
+        )
+
+        return try await savePrepared(candidate)
     }
 }
