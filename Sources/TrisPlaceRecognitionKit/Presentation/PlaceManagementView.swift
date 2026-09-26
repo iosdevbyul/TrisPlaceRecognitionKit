@@ -138,6 +138,7 @@ private extension PlaceManagementView {
                 place: place,
                 managementService: managementService,
                 networkManagementService: networkManagementService,
+                duplicateCheckService: duplicateCheckService,
                 onChanged: { _ in
                     refreshToken = UUID()
                 },

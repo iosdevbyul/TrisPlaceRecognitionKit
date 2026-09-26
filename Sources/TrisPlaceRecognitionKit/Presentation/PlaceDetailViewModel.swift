@@ -28,6 +28,16 @@ public final class PlaceDetailViewModel: ObservableObject {
 
     @Published
     public private(set) var errorMessage: String?
+    
+    @Published
+    public private(set) var duplicateWarnings: [PlaceDuplicateWarning] = []
+
+    @Published
+    public private(set) var duplicateWarningErrorMessage: String?
+
+    private let duplicateCheckService: PlaceDuplicateCheckService
+
+    private var warningRevision: UInt64 = 0
 
     private let managementService: PlaceManagementService
     private let networkManagementService: PlaceNetworkManagementService
@@ -35,13 +45,15 @@ public final class PlaceDetailViewModel: ObservableObject {
     public init(
         place: RegisteredPlace,
         managementService: PlaceManagementService,
-        networkManagementService: PlaceNetworkManagementService
+        networkManagementService: PlaceNetworkManagementService,
+        duplicateCheckService: PlaceDuplicateCheckService
     ) {
         self.place = place
         self.name = place.name.value
         self.recognitionRadius = place.location.recognitionRadius
         self.managementService = managementService
         self.networkManagementService = networkManagementService
+        self.duplicateCheckService = duplicateCheckService
     }
 
     public var canRename: Bool {
@@ -159,6 +171,11 @@ public final class PlaceDetailViewModel: ObservableObject {
             )
 
             didDelete = true
+            
+            warningRevision &+= 1
+
+            duplicateWarnings = []
+            duplicateWarningErrorMessage = nil
         } catch {
             errorMessage = message(for: error)
         }
@@ -166,6 +183,41 @@ public final class PlaceDetailViewModel: ObservableObject {
 
     public func clearError() {
         errorMessage = nil
+    }
+    
+    public func refreshDuplicateWarnings() async {
+        guard !didDelete else {
+            return
+        }
+
+        warningRevision &+= 1
+
+        let revision = warningRevision
+        let currentPlace = place
+
+        do {
+            let warnings = try await duplicateCheckService.check(
+                candidate: currentPlace
+            )
+
+            guard revision == warningRevision,
+                  currentPlace == place,
+                  !didDelete else {
+                return
+            }
+
+            duplicateWarnings = warnings
+            duplicateWarningErrorMessage = nil
+        } catch {
+            guard revision == warningRevision,
+                  currentPlace == place,
+                  !didDelete else {
+                return
+            }
+
+            duplicateWarnings = []
+            duplicateWarningErrorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -189,6 +241,8 @@ private extension PlaceDetailViewModel {
             let updated = try await operation()
 
             place = updated
+
+            await refreshDuplicateWarnings()
 
             return updated
         } catch {

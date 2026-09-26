@@ -32,6 +32,7 @@ public struct PlaceDetailView: View {
         place: RegisteredPlace,
         managementService: PlaceManagementService,
         networkManagementService: PlaceNetworkManagementService,
+        duplicateCheckService: PlaceDuplicateCheckService,
         onChanged: @escaping @MainActor (RegisteredPlace) -> Void = { _ in },
         onDeleted: @escaping @MainActor (UUID) -> Void = { _ in }
     ) {
@@ -39,7 +40,8 @@ public struct PlaceDetailView: View {
             wrappedValue: PlaceDetailViewModel(
                 place: place,
                 managementService: managementService,
-                networkManagementService: networkManagementService
+                networkManagementService: networkManagementService,
+                duplicateCheckService: duplicateCheckService
             )
         )
 
@@ -65,6 +67,11 @@ public struct PlaceDetailView: View {
             radiusSection
 
             locationSection
+            
+            if !viewModel.duplicateWarnings.isEmpty
+                || viewModel.duplicateWarningErrorMessage != nil {
+                duplicateWarningsSection
+            }
 
             wifiSection
 
@@ -150,10 +157,88 @@ public struct PlaceDetailView: View {
             onDeleted(viewModel.place.id)
             dismiss()
         }
+        .task {
+            await viewModel.refreshDuplicateWarnings()
+        }
     }
 }
 
 private extension PlaceDetailView {
+    
+    var duplicateWarningsSection: some View {
+        Section("다른 장소와 인식 대상 중복") {
+            if let error = viewModel.duplicateWarningErrorMessage {
+                Text("중복 검사를 완료하지 못했습니다.")
+                    .foregroundStyle(.red)
+
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button("다시 검사") {
+                    Task {
+                        await viewModel.refreshDuplicateWarnings()
+                    }
+                }
+            }
+
+            ForEach(
+                viewModel.duplicateWarnings.indices,
+                id: \.self
+            ) { index in
+                let warning = viewModel.duplicateWarnings[index]
+
+                VStack(
+                    alignment: .leading,
+                    spacing: 6
+                ) {
+                    Text(warning.existingPlace.name.value)
+                        .font(.headline)
+
+                    ForEach(
+                        warning.reasons.indices,
+                        id: \.self
+                    ) { reasonIndex in
+                        Text(
+                            duplicateReasonDescription(
+                                warning.reasons[reasonIndex]
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            if !viewModel.duplicateWarnings.isEmpty {
+                Text(
+                    "중복 경고는 정보 제공용입니다. " +
+                    "현재 장소의 설정은 자동으로 변경되지 않습니다."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    func duplicateReasonDescription(
+        _ reason: PlaceDuplicateReason
+    ) -> String {
+        switch reason {
+        case .sameBSSID:
+            return "동일한 Wi-Fi 공유기가 등록되어 있습니다."
+
+        case .sameSSID:
+            return "동일한 Wi-Fi 이름이 등록되어 있습니다."
+
+        case .overlappingGPS(let distance):
+            return String(
+                format: "인식 영역이 겹칩니다. 중심 간 거리: %.0fm",
+                distance
+            )
+        }
+    }
 
     var nameSection: some View {
         Section("장소 이름") {
