@@ -13,7 +13,14 @@ public struct PlaceListView: View {
     @StateObject
     private var viewModel: PlaceListViewModel
 
-    public init(placeStore: any PlaceStoring) {
+    private let refreshToken: UUID?
+
+    public init(
+        placeStore: any PlaceStoring,
+        refreshToken: UUID? = nil
+    ) {
+        self.refreshToken = refreshToken
+
         _viewModel = StateObject(
             wrappedValue: PlaceListViewModel(
                 placeStore: placeStore
@@ -89,6 +96,11 @@ public struct PlaceListView: View {
         }
         .task {
             await viewModel.load()
+        }
+        .onChange(of: refreshToken) { _ in
+            Task {
+                await viewModel.load()
+            }
         }
     }
 }

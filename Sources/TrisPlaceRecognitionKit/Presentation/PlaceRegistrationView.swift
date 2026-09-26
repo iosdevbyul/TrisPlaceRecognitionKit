@@ -9,7 +9,8 @@ import SwiftUI
 
 @MainActor
 public struct PlaceRegistrationView: View {
-
+    @Environment(\.dismiss)
+    private var dismiss
     @StateObject
     private var viewModel: PlaceRegistrationViewModel
 
@@ -49,6 +50,25 @@ public struct PlaceRegistrationView: View {
             }
 
             onRegistered(registeredPlace)
+        }
+        .toolbar {
+            ToolbarItem(
+                placement: .cancellationAction
+            ) {
+                if viewModel.phase != .completed {
+                    Button("닫기") {
+                        viewModel.cancelPreview()
+                        dismiss()
+                    }
+                    .disabled(viewModel.phase == .saving)
+                }
+            }
+        }
+        .interactiveDismissDisabled(
+            viewModel.phase == .saving
+        )
+        .onDisappear {
+            viewModel.cancelPreview()
         }
     }
 }
