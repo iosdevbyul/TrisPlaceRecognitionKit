@@ -10,4 +10,5 @@ public enum PlaceRegistrationError: Error,
                                     Equatable {
     case emptyName
     case nameTooLong
+    case currentWiFiUnavailable
 }

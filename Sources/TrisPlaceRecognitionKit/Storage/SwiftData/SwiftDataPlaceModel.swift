@@ -23,7 +23,8 @@ final class SwiftDataPlaceModel {
 
     var ssid: String?
     var bssid: String?
-
+    var additionalNetworksData: Data?
+    
     init(
         id: UUID,
         name: String,
@@ -31,7 +32,8 @@ final class SwiftDataPlaceModel {
         longitude: Double,
         recognitionRadius: Double,
         ssid: String?,
-        bssid: String?
+        bssid: String?,
+        additionalNetworksData: Data? = nil
     ) {
         self.id = id
         self.name = name
@@ -40,5 +42,6 @@ final class SwiftDataPlaceModel {
         self.recognitionRadius = recognitionRadius
         self.ssid = ssid
         self.bssid = bssid
+        self.additionalNetworksData = additionalNetworksData
     }
 }

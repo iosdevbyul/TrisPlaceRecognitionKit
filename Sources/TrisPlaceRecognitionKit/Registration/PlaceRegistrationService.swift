@@ -5,6 +5,7 @@
 //  Created by COMATOKI on 2026-09-22.
 //
 
+import Foundation
 import TrisLocationKit
 
 @MainActor
@@ -15,7 +16,7 @@ public final class PlaceRegistrationService {
     private let locationProvider: any LocationProviding
     private let wifiProvider: any WiFiProviding
     private let placeStore: any PlaceStoring
-    
+
     public init(
         locationProvider: any LocationProviding,
         wifiProvider: any WiFiProviding,
@@ -28,12 +29,35 @@ public final class PlaceRegistrationService {
 
     public func register(
         name: String,
-        recognitionRadius: Double = defaultRecognitionRadius
+        recognitionRadius: Double = defaultRecognitionRadius,
+        method: PlaceRegistrationMethod = .automatic
     ) async throws -> RegisteredPlace {
         let placeName = try PlaceName(name)
 
-        let locationPoint = try await locationProvider.requestCurrentLocation()
-        let network = await wifiProvider.currentNetwork()
+        let locationPoint = try await locationProvider
+            .requestCurrentLocation()
+
+        let network: WiFiNetwork?
+
+        switch method {
+        case .automatic:
+            network = await wifiProvider.currentNetwork()
+
+        case .wifi:
+            guard let currentNetwork = await wifiProvider.currentNetwork(),
+                  !currentNetwork.ssid
+                    .trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                    .isEmpty else {
+                throw PlaceRegistrationError.currentWiFiUnavailable
+            }
+
+            network = currentNetwork
+
+        case .gpsOnly:
+            network = nil
+        }
 
         let location = PlaceLocation(
             latitude: locationPoint.latitude,

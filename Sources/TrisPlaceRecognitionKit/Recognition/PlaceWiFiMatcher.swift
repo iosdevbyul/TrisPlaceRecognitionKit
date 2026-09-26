@@ -76,4 +76,51 @@ enum PlaceWiFiMatcher {
 
         return .mismatch
     }
+    
+    static func match(
+        registered: [PlaceNetworkIdentity],
+        current: WiFiNetwork?
+    ) -> PlaceWiFiMatch {
+        var hasConfiguredNetwork = false
+        var hasSSIDMatch = false
+        var hasUnavailableNetwork = false
+
+        for identity in registered {
+            let result = match(
+                registered: identity,
+                current: current
+            )
+
+            switch result {
+            case .bssid:
+                return .bssid
+
+            case .ssid:
+                hasConfiguredNetwork = true
+                hasSSIDMatch = true
+
+            case .unavailable:
+                hasConfiguredNetwork = true
+                hasUnavailableNetwork = true
+
+            case .mismatch:
+                hasConfiguredNetwork = true
+
+            case .notConfigured:
+                continue
+            }
+        }
+
+        if hasSSIDMatch {
+            return .ssid
+        }
+
+        if hasUnavailableNetwork {
+            return .unavailable
+        }
+
+        return hasConfiguredNetwork
+            ? .mismatch
+            : .notConfigured
+    }
 }
