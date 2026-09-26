@@ -1,8 +1,26 @@
+cat > .gitignore <<'EOF'
+# macOS
 .DS_Store
-/.build
-/Packages
+
+# Swift Package Manager
+/.build/
+/Packages/
+.swiftpm/
+
+# Xcode
 xcuserdata/
 DerivedData/
-.swiftpm/configuration/registries.json
-.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+*.xcresult/
+*.xcactivitylog
+
+# Build and debug logs
+*.log
+
+# Distribution
+*.ipa
+*.dSYM/
+*.dSYM.zip
+
+# Local configuration
 .netrc
+EOF
