@@ -72,4 +72,64 @@ struct PlaceManagementFlowTests {
         #expect(listViewModel.places == [saved])
         #expect(listViewModel.errorMessage == nil)
     }
+    
+    @Test
+    func editingAndDeletingRefreshesPlaceList() async throws {
+        let store = InMemoryPlaceStore()
+
+        let original = RegisteredPlace(
+            name: try PlaceName("헬스장"),
+            location: PlaceLocation(
+                latitude: 37.5665,
+                longitude: 126.9780,
+                recognitionRadius: 100
+            ),
+            networkIdentity: PlaceNetworkIdentity(
+                ssid: "GYM_WIFI",
+                bssid: "AA:BB:CC:DD:EE:FF"
+            )
+        )
+
+        try await store.save(original)
+
+        let managementService = PlaceManagementService(
+            placeStore: store,
+            locationProvider: MockLocationProvider()
+        )
+
+        let listViewModel = PlaceListViewModel(
+            placeStore: store
+        )
+
+        // Load the original place.
+        await listViewModel.load()
+
+        #expect(listViewModel.places == [original])
+
+        // Edit the place.
+        let renamed = try await managementService.renamePlace(
+            id: original.id,
+            to: "회사헬스장"
+        )
+
+        // Refresh the list.
+        await listViewModel.load()
+
+        #expect(listViewModel.places == [renamed])
+
+        #expect(
+            listViewModel.places.first?.id == original.id
+        )
+
+        // Delete the same place.
+        try await managementService.deletePlace(
+            id: original.id
+        )
+
+        // Refresh the list again.
+        await listViewModel.load()
+
+        #expect(listViewModel.places.isEmpty)
+        #expect(listViewModel.errorMessage == nil)
+    }
 }

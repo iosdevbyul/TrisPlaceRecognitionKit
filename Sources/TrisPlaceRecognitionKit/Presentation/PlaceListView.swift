@@ -15,11 +15,19 @@ public struct PlaceListView: View {
 
     private let refreshToken: UUID?
 
+    private let onSelect: (
+        @MainActor (RegisteredPlace) -> Void
+    )?
+
     public init(
         placeStore: any PlaceStoring,
-        refreshToken: UUID? = nil
+        refreshToken: UUID? = nil,
+        onSelect: (
+            @MainActor (RegisteredPlace) -> Void
+        )? = nil
     ) {
         self.refreshToken = refreshToken
+        self.onSelect = onSelect
 
         _viewModel = StateObject(
             wrappedValue: PlaceListViewModel(
@@ -66,28 +74,16 @@ public struct PlaceListView: View {
                 Spacer()
             } else {
                 List(viewModel.places) { place in
-                    VStack(
-                        alignment: .leading,
-                        spacing: 6
-                    ) {
-                        Text(place.name.value)
-                            .font(.headline)
-
-                        Text(
-                            place.networkIdentities.isEmpty
-                                ? "GPS 전용"
-                                : "Wi-Fi \(place.networkIdentities.count)개"
-                        )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                        Text(
-                            "인식 반경: \(Int(place.location.recognitionRadius))m"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let onSelect {
+                        Button {
+                            onSelect(place)
+                        } label: {
+                            placeRow(place)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        placeRow(place)
                     }
-                    .padding(.vertical, 4)
                 }
                 .refreshable {
                     await viewModel.load()
@@ -102,5 +98,44 @@ public struct PlaceListView: View {
                 await viewModel.load()
             }
         }
+    }
+    
+    private func placeRow(
+        _ place: RegisteredPlace
+    ) -> some View {
+        HStack(spacing: 12) {
+            VStack(
+                alignment: .leading,
+                spacing: 6
+            ) {
+                Text(place.name.value)
+                    .font(.headline)
+
+                Text(
+                    place.networkIdentities.isEmpty
+                        ? "GPS 전용"
+                        : "Wi-Fi \(place.networkIdentities.count)개"
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+                Text(
+                    "인식 반경: " +
+                    "\(Int(place.location.recognitionRadius))m"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if onSelect != nil {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
