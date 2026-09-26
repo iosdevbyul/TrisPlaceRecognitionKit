@@ -35,6 +35,9 @@ let package = Package(
             name: "TrisPlaceRecognitionKitTests",
             dependencies: [
                 "TrisPlaceRecognitionKit"
+            ],
+            resources: [
+                .copy("Fixtures/LegacySwiftDataV1")
             ]
         )
     ]
