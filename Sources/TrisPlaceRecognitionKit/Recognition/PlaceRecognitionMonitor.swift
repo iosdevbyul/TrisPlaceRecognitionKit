@@ -5,7 +5,6 @@
 //  Created by COMATOKI on 2026-09-24.
 //
 
-
 import Combine
 import Foundation
 
@@ -21,14 +20,29 @@ public final class PlaceRecognitionMonitor: ObservableObject {
     @Published
     public private(set) var lastErrorMessage: String?
 
+    @Published
+    public private(set) var lastVisitErrorMessage: String?
+
+    // Set after restoring the PlaceVisitCoordinator,
+    // before calling start().
+    //
+    // This callback runs for every successful
+    // recognition observation, including an empty
+    // result and unchanged recognition results.
+    public var onSuccessfulRecognition:
+        (@MainActor @Sendable (
+            [RecognizedPlace],
+            Date
+        ) async throws -> Void)?
+
     private let recognitionService: PlaceRecognitionService
     private let policy: PlaceRecognitionPolicy
     private let refreshInterval: TimeInterval
 
     private var monitoringTask: Task<Void, Never>?
 
-    // Prevent an older asynchronous request from
-    // overwriting a newer recognition result.
+    // Prevent older asynchronous results from
+    // overwriting newer recognition results.
     private var refreshRevision: UInt64 = 0
 
     public init(
@@ -41,25 +55,29 @@ public final class PlaceRecognitionMonitor: ObservableObject {
 
         if refreshInterval.isFinite,
            (5...3600).contains(refreshInterval) {
+
             self.refreshInterval = refreshInterval
+
         } else {
+
             self.refreshInterval = 15
         }
     }
 
     public func start() async {
+
         guard !isMonitoring else {
             return
         }
 
         isMonitoring = true
 
-        // Recognize immediately instead of waiting
-        // for the first polling interval.
+        // Recognize immediately.
         await refresh()
 
         guard isMonitoring,
               !Task.isCancelled else {
+
             stop()
             return
         }
@@ -69,12 +87,17 @@ public final class PlaceRecognitionMonitor: ObservableObject {
         )
 
         monitoringTask = Task { [weak self] in
+
             while !Task.isCancelled {
+
                 do {
+
                     try await Task.sleep(
                         nanoseconds: sleepNanoseconds
                     )
+
                 } catch {
+
                     return
                 }
 
@@ -90,14 +113,58 @@ public final class PlaceRecognitionMonitor: ObservableObject {
     }
 
     public func refresh() async {
+
         refreshRevision &+= 1
+
         let revision = refreshRevision
 
         do {
+
             let places = try await recognitionService
                 .recognizeCurrentPlaces(
                     policy: policy
                 )
+
+            guard revision == refreshRevision,
+                  !Task.isCancelled else {
+                return
+            }
+
+            let observedAt = Date()
+
+            // Visit persistence is independent from
+            // the recognition request's success.
+            if let onSuccessfulRecognition {
+
+                do {
+
+                    try await onSuccessfulRecognition(
+                        places,
+                        observedAt
+                    )
+
+                    guard revision == refreshRevision,
+                          !Task.isCancelled else {
+                        return
+                    }
+
+                    lastVisitErrorMessage = nil
+
+                } catch {
+
+                    guard revision == refreshRevision,
+                          !Task.isCancelled else {
+                        return
+                    }
+
+                    lastVisitErrorMessage =
+                        error.localizedDescription
+                }
+
+            } else {
+
+                lastVisitErrorMessage = nil
+            }
 
             guard revision == refreshRevision,
                   !Task.isCancelled else {
@@ -109,20 +176,25 @@ public final class PlaceRecognitionMonitor: ObservableObject {
             }
 
             lastErrorMessage = nil
+
         } catch {
+
             guard revision == refreshRevision,
                   !Task.isCancelled else {
                 return
             }
 
-            // Never expose an old place as the
-            // current place after recognition fails.
+            // Recognition failed. Do not notify the
+            // visit coordinator with an empty result.
             recognizedPlaces = []
-            lastErrorMessage = error.localizedDescription
+
+            lastErrorMessage =
+                error.localizedDescription
         }
     }
 
     public func stop() {
+
         monitoringTask?.cancel()
         monitoringTask = nil
 
@@ -130,6 +202,11 @@ public final class PlaceRecognitionMonitor: ObservableObject {
 
         isMonitoring = false
         recognizedPlaces = []
+
         lastErrorMessage = nil
+        lastVisitErrorMessage = nil
+
+        // Do not reset onSuccessfulRecognition.
+        // It can be reused when monitoring resumes.
     }
 }

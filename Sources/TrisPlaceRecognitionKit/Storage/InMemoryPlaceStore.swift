@@ -36,14 +36,14 @@ public actor InMemoryPlaceStore: PlaceStoring {
             $0.id == id
         }
     }
-    
+
     public func update(
         id: UUID,
         _ transform: @Sendable (RegisteredPlace) throws -> RegisteredPlace
     ) async throws -> RegisteredPlace? {
-        guard let index = storedPlaces.firstIndex(where: {
-            $0.id == id
-        }) else {
+        guard let index = storedPlaces.firstIndex(
+            where: { $0.id == id }
+        ) else {
             return nil
         }
 
