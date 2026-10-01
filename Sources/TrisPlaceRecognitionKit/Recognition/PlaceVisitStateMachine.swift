@@ -7,6 +7,12 @@
 
 import Foundation
 
+public enum PlaceVisitRestorationError: Error, Sendable, Equatable {
+    case invalidRecord
+    case duplicateVisit
+    case duplicatePlace
+}
+
 public struct PlaceVisitStateMachine: Sendable {
 
     private enum State: Sendable {
@@ -37,8 +43,52 @@ public struct PlaceVisitStateMachine: Sendable {
         self.policy = policy
     }
 
+    // Restore only confirmed, active visits.
+    // Pending confirmation periods are intentionally
+    // not restored after an application restart.
+    public init(
+        policy: PlaceVisitPolicy = .init(),
+        restoring activeVisits: [PlaceVisitRecord]
+    ) throws {
+
+        self.policy = policy
+
+        var restoredStates: [UUID: State] = [:]
+        var visitIDs = Set<UUID>()
+
+        for record in activeVisits {
+
+            guard record.isActive,
+                  record.startedAt.timeIntervalSince1970.isFinite else {
+                throw PlaceVisitRestorationError.invalidRecord
+            }
+
+            guard visitIDs.insert(record.id).inserted else {
+                throw PlaceVisitRestorationError.duplicateVisit
+            }
+
+            guard restoredStates[record.placeID] == nil else {
+                throw PlaceVisitRestorationError.duplicatePlace
+            }
+
+            restoredStates[record.placeID] = .inside(
+                record: record
+            )
+        }
+
+        self.states = restoredStates
+
+        // Prevent restored visits from processing an
+        // observation older than their start times.
+        self.lastProcessedAt = activeVisits
+            .map(\.startedAt)
+            .max()
+    }
+
     public var activeVisits: [PlaceVisitRecord] {
+
         states.values.compactMap { state in
+
             switch state {
 
             case .inside(let record):
@@ -57,8 +107,8 @@ public struct PlaceVisitStateMachine: Sendable {
     }
 
     // Only process successful recognition observations.
-    // Recognition failures must not be represented
-    // as an empty recognizedPlaces array.
+    // Recognition failures and monitor suspension
+    // must never be passed as an empty snapshot.
     public mutating func process(
         _ recognizedPlaces: [RecognizedPlace],
         at timestamp: Date
@@ -68,8 +118,6 @@ public struct PlaceVisitStateMachine: Sendable {
             return PlaceVisitUpdate()
         }
 
-        // Ignore observations that are older than or
-        // equal to the last processed observation.
         if let lastProcessedAt,
            timestamp <= lastProcessedAt {
             return PlaceVisitUpdate()
@@ -78,19 +126,21 @@ public struct PlaceVisitStateMachine: Sendable {
         let hasObservationGap: Bool
 
         if let lastProcessedAt {
+
             let elapsed = timestamp.timeIntervalSince(
                 lastProcessedAt
             )
 
             hasObservationGap =
                 elapsed > policy.maximumObservationGap
+
         } else {
+
             hasObservationGap = false
         }
 
         lastProcessedAt = timestamp
 
-        // Keep only one recognition result per place.
         var recognizedByID: [UUID: RecognizedPlace] = [:]
 
         for recognizedPlace in recognizedPlaces {
@@ -102,10 +152,6 @@ public struct PlaceVisitStateMachine: Sendable {
             }
         }
 
-        // Reset pending confirmation periods after
-        // a long gap without successful observations.
-        //
-        // Never discard an already confirmed visit.
         if hasObservationGap {
             resetPendingStates()
         }
@@ -117,9 +163,7 @@ public struct PlaceVisitStateMachine: Sendable {
             }
 
         var events: [PlaceVisitEvent] = []
-
         var startedVisits: [PlaceVisitRecord] = []
-
         var endedVisits: [PlaceVisitRecord] = []
 
         for placeID in allPlaceIDs {
@@ -192,16 +236,16 @@ public struct PlaceVisitStateMachine: Sendable {
 
                 case .some(.inside):
 
-                    // An existing visit must not generate
-                    // another arrival event.
+                    // The visit has already been confirmed.
+                    // Never emit another arrival event.
                     continue
 
                 case .some(
                     .departurePending(let record, _)
                 ):
 
-                    // Recognition recovered before
-                    // departure was confirmed.
+                    // The place was recognized again.
+                    // Preserve the original visit ID.
                     states[placeID] = .inside(
                         record: record
                     )
@@ -217,8 +261,9 @@ public struct PlaceVisitStateMachine: Sendable {
 
                 case .some(.arrivalPending):
 
-                    // Arrival confirmation was interrupted.
-                    states.removeValue(forKey: placeID)
+                    states.removeValue(
+                        forKey: placeID
+                    )
 
                 case .some(.inside(let record)):
 
@@ -228,9 +273,13 @@ public struct PlaceVisitStateMachine: Sendable {
                             at: timestamp
                         )
 
-                        states.removeValue(forKey: placeID)
+                        states.removeValue(
+                            forKey: placeID
+                        )
 
-                        endedVisits.append(endedRecord)
+                        endedVisits.append(
+                            endedRecord
+                        )
 
                         events.append(
                             makeEvent(
@@ -268,9 +317,13 @@ public struct PlaceVisitStateMachine: Sendable {
                         at: timestamp
                     )
 
-                    states.removeValue(forKey: placeID)
+                    states.removeValue(
+                        forKey: placeID
+                    )
 
-                    endedVisits.append(endedRecord)
+                    endedVisits.append(
+                        endedRecord
+                    )
 
                     events.append(
                         makeEvent(
@@ -307,18 +360,19 @@ private extension PlaceVisitStateMachine {
 
             case .arrivalPending:
 
-                // Discard unconfirmed arrival.
-                states.removeValue(forKey: placeID)
+                states.removeValue(
+                    forKey: placeID
+                )
 
             case .inside:
 
-                // Preserve confirmed visit.
+                // Preserve the confirmed visit.
                 break
 
             case .departurePending(let record, _):
 
-                // Discard the previous missing interval,
-                // but keep the existing visit.
+                // The missing interval is no longer
+                // reliable after a long observation gap.
                 states[placeID] = .inside(
                     record: record
                 )
