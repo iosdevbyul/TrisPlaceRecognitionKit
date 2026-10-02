@@ -342,9 +342,236 @@ public struct PlaceVisitStateMachine: Sendable {
             endedVisits: endedVisits
         )
     }
+
+    // A background region event is not enough by itself
+    // to change visit state.
+    //
+    // The caller must first complete a successful
+    // PlaceRecognitionService request caused by the region
+    // event, then pass that successful observation here.
+    //
+    // Region transition + successful recognition is treated
+    // as verified evidence, so foreground confirmation
+    // intervals aren't required for the targeted place.
+    mutating func processVerifiedBackgroundObservation(
+        _ recognizedPlaces: [RecognizedPlace],
+        trigger: BackgroundRecognitionTrigger,
+        at timestamp: Date
+    ) -> PlaceVisitUpdate {
+
+        guard timestamp.timeIntervalSince1970.isFinite else {
+            return PlaceVisitUpdate()
+        }
+
+        if let lastProcessedAt,
+           timestamp <= lastProcessedAt {
+            return PlaceVisitUpdate()
+        }
+
+        let hasObservationGap: Bool
+
+        if let lastProcessedAt {
+
+            let elapsed = timestamp.timeIntervalSince(
+                lastProcessedAt
+            )
+
+            hasObservationGap =
+                elapsed > policy.maximumObservationGap
+
+        } else {
+
+            hasObservationGap = false
+        }
+
+        lastProcessedAt = timestamp
+
+        if hasObservationGap {
+            resetPendingStates()
+        }
+
+        switch trigger {
+
+        case .monitoredRegionEntered(let placeID):
+
+            return processVerifiedEntry(
+                placeID: placeID,
+                recognizedPlaces: recognizedPlaces,
+                at: timestamp
+            )
+
+        case .monitoredRegionExited(let placeID):
+
+            return processVerifiedExit(
+                placeID: placeID,
+                recognizedPlaces: recognizedPlaces,
+                at: timestamp
+            )
+
+        case .significantLocationChange:
+
+            // Significant movement is used to refresh
+            // monitoring candidates, not to infer visits.
+            return PlaceVisitUpdate()
+        }
+    }
 }
 
 private extension PlaceVisitStateMachine {
+
+    mutating func processVerifiedEntry(
+        placeID: UUID,
+        recognizedPlaces: [RecognizedPlace],
+        at timestamp: Date
+    ) -> PlaceVisitUpdate {
+
+        guard let recognizedPlace =
+                recognizedPlaces.first(
+                    where: {
+                        $0.place.id == placeID
+                    }
+                )
+        else {
+
+            // The system reported entry, but actual
+            // recognition didn't confirm this place.
+            return PlaceVisitUpdate()
+        }
+
+        switch states[placeID] {
+
+        case nil,
+             .some(.arrivalPending):
+
+            let record = makeVisit(
+                for: recognizedPlace,
+                at: timestamp
+            )
+
+            states[placeID] = .inside(
+                record: record
+            )
+
+            let event = makeEvent(
+                kind: .arrived,
+                record: record,
+                at: timestamp
+            )
+
+            return PlaceVisitUpdate(
+                events: [
+                    event
+                ],
+                startedVisits: [
+                    record
+                ]
+            )
+
+        case .some(.inside):
+
+            return PlaceVisitUpdate()
+
+        case .some(
+            .departurePending(let record, _)
+        ):
+
+            // Actual recognition disproved the pending
+            // departure. Keep the original visit.
+            states[placeID] = .inside(
+                record: record
+            )
+
+            return PlaceVisitUpdate()
+        }
+    }
+
+    mutating func processVerifiedExit(
+        placeID: UUID,
+        recognizedPlaces: [RecognizedPlace],
+        at timestamp: Date
+    ) -> PlaceVisitUpdate {
+
+        let stillRecognized =
+            recognizedPlaces.contains {
+                $0.place.id == placeID
+            }
+
+        if stillRecognized {
+
+            if case .some(
+                .departurePending(let record, _)
+            ) = states[placeID] {
+
+                states[placeID] = .inside(
+                    record: record
+                )
+            }
+
+            // The system reported exit, but actual
+            // recognition still confirms the place.
+            return PlaceVisitUpdate()
+        }
+
+        switch states[placeID] {
+
+        case nil:
+
+            return PlaceVisitUpdate()
+
+        case .some(.arrivalPending):
+
+            states.removeValue(
+                forKey: placeID
+            )
+
+            return PlaceVisitUpdate()
+
+        case .some(.inside(let record)):
+
+            return finishVerifiedVisit(
+                record,
+                at: timestamp
+            )
+
+        case .some(
+            .departurePending(let record, _)
+        ):
+
+            return finishVerifiedVisit(
+                record,
+                at: timestamp
+            )
+        }
+    }
+
+    mutating func finishVerifiedVisit(
+        _ record: PlaceVisitRecord,
+        at timestamp: Date
+    ) -> PlaceVisitUpdate {
+
+        let endedRecord = record.ending(
+            at: timestamp
+        )
+
+        states.removeValue(
+            forKey: record.placeID
+        )
+
+        let event = makeEvent(
+            kind: .departed,
+            record: endedRecord,
+            at: timestamp
+        )
+
+        return PlaceVisitUpdate(
+            events: [
+                event
+            ],
+            endedVisits: [
+                endedRecord
+            ]
+        )
+    }
 
     mutating func resetPendingStates() {
 
