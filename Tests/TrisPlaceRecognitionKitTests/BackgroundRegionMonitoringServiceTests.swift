@@ -41,7 +41,8 @@ struct BackgroundRegionMonitoringServiceTests {
             candidates: [
                 gym,
                 office
-            ]
+            ],
+            requiresCandidateRefresh: false
         )
 
         #expect(
@@ -102,9 +103,10 @@ struct BackgroundRegionMonitoringServiceTests {
                 monitor: monitor
             )
 
-        try await service.synchronize(
-            candidates: []
-        )
+            try await service.synchronize(
+                candidates: [],
+                requiresCandidateRefresh: false
+            )
 
         #expect(
             monitor
@@ -165,6 +167,41 @@ private extension
                 distanceMeters
         )
     }
+    
+    @Test
+    func enablesCandidateRefreshWhenRequired()
+        async throws {
+
+        let monitor =
+            SpyBackgroundRegionMonitor()
+
+        let service =
+            BackgroundRegionMonitoringService(
+                monitor: monitor
+            )
+
+        let gym =
+            try makeCandidate(
+                name: "Gym",
+                latitude: 37.5665,
+                distanceMeters: 10
+            )
+
+        try await service.synchronize(
+            candidates: [
+                gym
+            ],
+            requiresCandidateRefresh: true
+        )
+
+        #expect(
+            monitor
+                .candidateRefreshMonitoringValues
+                == [
+                    true
+                ]
+        )
+    }
 }
 
 @MainActor
@@ -177,6 +214,20 @@ private final class SpyBackgroundRegionMonitor:
 
     private(set)
     var stopAllCallCount = 0
+    
+    private(set)
+    var candidateRefreshMonitoringValues:
+        [Bool] = []
+    
+    func setCandidateRefreshMonitoringEnabled(
+        _ enabled: Bool
+    ) async throws {
+
+        candidateRefreshMonitoringValues
+            .append(
+                enabled
+            )
+    }
 
     func events()
         -> AsyncThrowingStream<

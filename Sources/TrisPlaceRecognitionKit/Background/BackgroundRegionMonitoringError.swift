@@ -14,6 +14,8 @@ enum BackgroundRegionMonitoringError:
 
     case monitoringUnavailable
 
+    case candidateRefreshMonitoringUnavailable
+
     case invalidCoordinate(
         placeID: UUID
     )

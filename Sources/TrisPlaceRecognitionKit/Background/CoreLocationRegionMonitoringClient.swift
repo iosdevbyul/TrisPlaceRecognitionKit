@@ -26,6 +26,11 @@ protocol CoreLocationRegionMonitoringClient:
         get
     }
 
+    var isSignificantLocationChangeMonitoringAvailable:
+        Bool {
+        get
+    }
+
     var onRegionEntered:
         ((CLRegion) -> Void)? {
         get set
@@ -33,6 +38,11 @@ protocol CoreLocationRegionMonitoringClient:
 
     var onRegionExited:
         ((CLRegion) -> Void)? {
+        get set
+    }
+
+    var onSignificantLocationChanged:
+        (() -> Void)? {
         get set
     }
 
@@ -48,6 +58,10 @@ protocol CoreLocationRegionMonitoringClient:
     func stopMonitoring(
         for region: CLRegion
     )
+
+    func startMonitoringSignificantLocationChanges()
+
+    func stopMonitoringSignificantLocationChanges()
 }
 
 @MainActor
@@ -64,18 +78,25 @@ final class SystemCoreLocationRegionMonitoringClient:
     var onRegionExited:
         ((CLRegion) -> Void)?
 
+    var onSignificantLocationChanged:
+        (() -> Void)?
+
     var onMonitoringFailure:
         ((CLRegion?, any Error) -> Void)?
 
     override init() {
-        locationManager = CLLocationManager()
+
+        locationManager =
+            CLLocationManager()
 
         super.init()
 
-        locationManager.delegate = self
+        locationManager.delegate =
+            self
     }
 
     var monitoredRegions: [CLRegion] {
+
         Array(
             locationManager.monitoredRegions
         )
@@ -91,14 +112,23 @@ final class SystemCoreLocationRegionMonitoringClient:
     var isCircularRegionMonitoringAvailable:
         Bool {
 
-        CLLocationManager.isMonitoringAvailable(
-            for: CLCircularRegion.self
-        )
+        CLLocationManager
+            .isMonitoringAvailable(
+                for: CLCircularRegion.self
+            )
+    }
+
+    var isSignificantLocationChangeMonitoringAvailable:
+        Bool {
+
+        CLLocationManager
+            .significantLocationChangeMonitoringAvailable()
     }
 
     func startMonitoring(
         for region: CLRegion
     ) {
+
         locationManager.startMonitoring(
             for: region
         )
@@ -107,9 +137,22 @@ final class SystemCoreLocationRegionMonitoringClient:
     func stopMonitoring(
         for region: CLRegion
     ) {
+
         locationManager.stopMonitoring(
             for: region
         )
+    }
+
+    func startMonitoringSignificantLocationChanges() {
+
+        locationManager
+            .startMonitoringSignificantLocationChanges()
+    }
+
+    func stopMonitoringSignificantLocationChanges() {
+
+        locationManager
+            .stopMonitoringSignificantLocationChanges()
     }
 }
 
@@ -120,14 +163,39 @@ extension SystemCoreLocationRegionMonitoringClient:
         _ manager: CLLocationManager,
         didEnterRegion region: CLRegion
     ) {
-        onRegionEntered?(region)
+
+        onRegionEntered?(
+            region
+        )
     }
 
     func locationManager(
         _ manager: CLLocationManager,
         didExitRegion region: CLRegion
     ) {
-        onRegionExited?(region)
+
+        onRegionExited?(
+            region
+        )
+    }
+
+    func locationManager(
+        _ manager: CLLocationManager,
+        didUpdateLocations locations: [CLLocation]
+    ) {
+
+        guard !locations.isEmpty else {
+            return
+        }
+
+        // This CLLocationManager is intentionally used
+        // only for region monitoring and the low-power
+        // significant-change service.
+        //
+        // Coordinates aren't retained here because this
+        // callback is only a trigger to recalculate nearby
+        // monitoring candidates.
+        onSignificantLocationChanged?()
     }
 
     func locationManager(
@@ -135,6 +203,7 @@ extension SystemCoreLocationRegionMonitoringClient:
         monitoringDidFailFor region: CLRegion?,
         withError error: any Error
     ) {
+
         onMonitoringFailure?(
             region,
             error

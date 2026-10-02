@@ -557,9 +557,14 @@ private extension PlaceVisitManager {
                         backgroundRecognitionPolicy
                 )
 
+        let requiresCandidateRefresh =
+            places.count > candidates.count
+
         try await backgroundMonitoringService
             .synchronize(
-                candidates: candidates
+                candidates: candidates,
+                requiresCandidateRefresh:
+                    requiresCandidateRefresh
             )
     }
 

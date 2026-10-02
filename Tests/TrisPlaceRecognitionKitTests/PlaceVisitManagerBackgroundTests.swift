@@ -602,6 +602,20 @@ private final class TestBackgroundRegionMonitor:
 
     private(set)
     var stopAllCallCount = 0
+    
+    private(set)
+    var candidateRefreshMonitoringValues:
+        [Bool] = []
+    
+    func setCandidateRefreshMonitoringEnabled(
+        _ enabled: Bool
+    ) async throws {
+
+        candidateRefreshMonitoringValues
+            .append(
+                enabled
+            )
+    }
 
     private var eventContinuation:
         AsyncThrowingStream<

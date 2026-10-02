@@ -676,6 +676,150 @@ struct CoreLocationBackgroundRegionMonitorTests {
                 )
         )
     }
+    
+    @Test
+    func candidateRefreshStartsSignificantChangeMonitoring()
+        async throws {
+
+        let client =
+            MockCoreLocationRegionMonitoringClient()
+
+        let monitor =
+            CoreLocationBackgroundRegionMonitor(
+                client: client
+            )
+
+        try await monitor
+            .setCandidateRefreshMonitoringEnabled(
+                true
+            )
+
+        #expect(
+            client
+                .startSignificantLocationChangeCallCount
+                == 1
+        )
+    }
+    
+    @Test
+    func candidateRefreshDoesNotRestartAlreadyActiveService()
+        async throws {
+
+        let client =
+            MockCoreLocationRegionMonitoringClient()
+
+        let monitor =
+            CoreLocationBackgroundRegionMonitor(
+                client: client
+            )
+
+        try await monitor
+            .setCandidateRefreshMonitoringEnabled(
+                true
+            )
+
+        try await monitor
+            .setCandidateRefreshMonitoringEnabled(
+                true
+            )
+
+        #expect(
+            client
+                .startSignificantLocationChangeCallCount
+                == 1
+        )
+    }
+    
+    @Test
+    func ignoresInitialSignificantLocationCallbackThenEmitsNextOne()
+        async throws {
+
+        let client =
+            MockCoreLocationRegionMonitoringClient()
+
+        let monitor =
+            CoreLocationBackgroundRegionMonitor(
+                client: client
+            )
+
+        let stream =
+            monitor.events()
+
+        var iterator =
+            stream.makeAsyncIterator()
+
+        try await monitor
+            .setCandidateRefreshMonitoringEnabled(
+                true
+            )
+
+        // Initial callback after the service starts.
+        client.simulateSignificantLocationChange()
+
+        // Actual later movement.
+        client.simulateSignificantLocationChange()
+
+        let event =
+            try await iterator.next()
+
+        #expect(
+            event == .significantLocationChange
+        )
+    }
+    
+    @Test
+    func rejectsUnavailableCandidateRefreshMonitoring()
+        async {
+
+        let client =
+            MockCoreLocationRegionMonitoringClient()
+
+        client
+            .isSignificantLocationChangeMonitoringAvailable =
+            false
+
+        let monitor =
+            CoreLocationBackgroundRegionMonitor(
+                client: client
+            )
+
+        var receivedError:
+            BackgroundRegionMonitoringError?
+
+        do {
+
+            try await monitor
+                .setCandidateRefreshMonitoringEnabled(
+                    true
+                )
+
+            Issue.record(
+                "Expected candidate refresh monitoring failure."
+            )
+
+        } catch let error
+            as BackgroundRegionMonitoringError {
+
+            receivedError = error
+
+        } catch {
+
+            Issue.record(
+                "Unexpected error: \(error)"
+            )
+        }
+
+        #expect(
+            receivedError
+                == .candidateRefreshMonitoringUnavailable
+        )
+
+        #expect(
+            client
+                .startSignificantLocationChangeCallCount
+                == 0
+        )
+    }
 }
 
 private extension
@@ -811,6 +955,33 @@ private final class
     private(set)
     var stoppedRegions:
         [CLRegion] = []
+    
+    var isSignificantLocationChangeMonitoringAvailable =
+        true
+
+    var onSignificantLocationChanged:
+        (() -> Void)?
+
+    private(set)
+    var startSignificantLocationChangeCallCount = 0
+
+    private(set)
+    var stopSignificantLocationChangeCallCount = 0
+    
+    func startMonitoringSignificantLocationChanges() {
+
+        startSignificantLocationChangeCallCount += 1
+    }
+
+    func stopMonitoringSignificantLocationChanges() {
+
+        stopSignificantLocationChangeCallCount += 1
+    }
+
+    func simulateSignificantLocationChange() {
+
+        onSignificantLocationChanged?()
+    }
 
     func startMonitoring(
         for region: CLRegion

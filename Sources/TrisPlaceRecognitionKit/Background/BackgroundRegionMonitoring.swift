@@ -19,5 +19,9 @@ protocol BackgroundRegionMonitoring:
         regions: [BackgroundMonitoredRegion]
     ) async throws
 
+    func setCandidateRefreshMonitoringEnabled(
+        _ enabled: Bool
+    ) async throws
+
     func stopAll() async
 }

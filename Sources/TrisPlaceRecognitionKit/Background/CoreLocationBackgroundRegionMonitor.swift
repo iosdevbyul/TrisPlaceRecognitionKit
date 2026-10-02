@@ -31,6 +31,12 @@ final class CoreLocationBackgroundRegionMonitor:
 
     private var pendingFailure:
         BackgroundRegionMonitoringError?
+    
+    private var isCandidateRefreshMonitoringEnabled =
+        false
+
+    private var suppressNextCandidateRefreshTrigger =
+        false
 
     init() {
         client =
@@ -217,11 +223,81 @@ final class CoreLocationBackgroundRegionMonitor:
             )
         }
     }
+    
+    func setCandidateRefreshMonitoringEnabled(
+        _ enabled: Bool
+    ) async throws {
+
+        if enabled {
+
+            guard
+                client
+                    .isSignificantLocationChangeMonitoringAvailable
+            else {
+
+                throw BackgroundRegionMonitoringError
+                    .candidateRefreshMonitoringUnavailable
+            }
+
+            guard
+                !isCandidateRefreshMonitoringEnabled
+            else {
+                return
+            }
+
+            isCandidateRefreshMonitoringEnabled =
+                true
+
+            // Core Location normally delivers an initial
+            // location after this service starts.
+            //
+            // The manager has already taken a fresh snapshot
+            // to select its initial candidate regions, so that
+            // first callback must not cause an immediate second
+            // candidate refresh.
+            suppressNextCandidateRefreshTrigger =
+                true
+
+            client
+                .startMonitoringSignificantLocationChanges()
+
+            return
+        }
+
+        // Call stop even on a newly created monitor.
+        // After an application relaunch the system service
+        // may have existed before this object was recreated.
+        if client
+            .isSignificantLocationChangeMonitoringAvailable {
+
+            client
+                .stopMonitoringSignificantLocationChanges()
+        }
+
+        isCandidateRefreshMonitoringEnabled =
+            false
+
+        suppressNextCandidateRefreshTrigger =
+            false
+    }
 
     func stopAll() async {
 
         pendingTriggers.removeAll()
         pendingFailure = nil
+
+        if client
+            .isSignificantLocationChangeMonitoringAvailable {
+
+            client
+                .stopMonitoringSignificantLocationChanges()
+        }
+
+        isCandidateRefreshMonitoringEnabled =
+            false
+
+        suppressNextCandidateRefreshTrigger =
+            false
 
         let ownedRegions =
             client
@@ -294,6 +370,13 @@ private extension
             self?.handleRegionExited(
                 region
             )
+        }
+        
+        client.onSignificantLocationChanged = {
+            [weak self] in
+
+            self?
+                .handleSignificantLocationChange()
         }
 
         client.onMonitoringFailure = {
@@ -543,6 +626,27 @@ private extension
         )
         && (-180...180).contains(
             longitude
+        )
+    }
+    
+    func handleSignificantLocationChange() {
+
+        guard
+            isCandidateRefreshMonitoringEnabled
+        else {
+            return
+        }
+
+        if suppressNextCandidateRefreshTrigger {
+
+            suppressNextCandidateRefreshTrigger =
+                false
+
+            return
+        }
+
+        yield(
+            .significantLocationChange
         )
     }
 }
