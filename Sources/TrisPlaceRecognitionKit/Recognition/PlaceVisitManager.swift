@@ -281,6 +281,15 @@ public final class PlaceVisitManager: ObservableObject {
             lastBackgroundErrorMessage =
                 error.localizedDescription
 
+            // synchronizeBackgroundMonitoring() can mark
+            // the feature disabled when a fatal condition
+            // makes background monitoring unusable.
+            if !isBackgroundRecognitionEnabled {
+
+                backgroundEventTask?.cancel()
+                backgroundEventTask = nil
+            }
+
             throw error
         }
     }
@@ -524,7 +533,22 @@ private extension PlaceVisitManager {
             return
         }
 
-        try validateBackgroundAuthorization()
+        do {
+
+            try validateBackgroundAuthorization()
+
+        } catch {
+
+            // Authorization failures are terminal for
+            // background recognition. Do not leave stale
+            // system monitoring active.
+            await backgroundMonitoringService
+                .stop()
+
+            isBackgroundRecognitionEnabled = false
+
+            throw error
+        }
 
         guard
             let currentLocation =
@@ -532,6 +556,9 @@ private extension PlaceVisitManager {
                     .requestBackgroundMonitoringLocation()
         else {
 
+            // A poor location snapshot is temporary.
+            // Preserve the currently registered regions
+            // and allow a later retry.
             throw BackgroundRecognitionManagerError
                 .unacceptableLocationSnapshot
         }
@@ -560,12 +587,25 @@ private extension PlaceVisitManager {
         let requiresCandidateRefresh =
             places.count > candidates.count
 
-        try await backgroundMonitoringService
-            .synchronize(
-                candidates: candidates,
-                requiresCandidateRefresh:
-                    requiresCandidateRefresh
-            )
+        do {
+
+            try await backgroundMonitoringService
+                .synchronize(
+                    candidates: candidates,
+                    requiresCandidateRefresh:
+                        requiresCandidateRefresh
+                )
+
+        } catch {
+
+            // BackgroundRegionMonitoringService already
+            // rolls back its system monitoring when this
+            // operation fails. Keep manager state aligned
+            // with that terminal failure.
+            isBackgroundRecognitionEnabled = false
+
+            throw error
+        }
     }
 
     func validateBackgroundAuthorization()
@@ -647,8 +687,36 @@ private extension PlaceVisitManager {
                         self
                             .lastBackgroundErrorMessage =
                             error.localizedDescription
+
+                        // A fatal synchronization failure
+                        // can disable monitoring from inside
+                        // processBackgroundTrigger().
+                        if !self
+                            .isBackgroundRecognitionEnabled {
+
+                            self.backgroundEventTask = nil
+
+                            return
+                        }
                     }
                 }
+
+                guard !Task.isCancelled,
+                      let self else {
+                    return
+                }
+
+                // An unexpected normal stream termination
+                // means there is no longer an event source.
+                await self
+                    .backgroundMonitoringService
+                    .stop()
+
+                self
+                    .isBackgroundRecognitionEnabled =
+                    false
+
+                self.backgroundEventTask = nil
 
             } catch is CancellationError {
 
@@ -664,8 +732,18 @@ private extension PlaceVisitManager {
                 self.lastBackgroundErrorMessage =
                     error.localizedDescription
 
-                self.isBackgroundRecognitionEnabled =
+                // The stream itself failed. System
+                // monitoring must not remain active while
+                // the manager claims the feature is stopped.
+                await self
+                    .backgroundMonitoringService
+                    .stop()
+
+                self
+                    .isBackgroundRecognitionEnabled =
                     false
+
+                self.backgroundEventTask = nil
             }
         }
     }

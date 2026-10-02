@@ -1329,6 +1329,329 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
+    
+    @Test
+    func eventStreamFailureDisablesAndStopsBackgroundRecognition()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider()
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let gym =
+            try makePlace(
+                name: "Gym",
+                latitude: 37.5665,
+                ssid: nil
+            )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .gpsConstrained,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    .init(),
+                backgroundMonitor:
+                    backgroundMonitor
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        #expect(
+            manager
+                .isBackgroundRecognitionEnabled
+        )
+
+        backgroundMonitor.fail(
+            with:
+                PlaceVisitManagerBackgroundTestError
+                    .streamFailure
+        )
+
+        await waitUntil {
+
+            !manager
+                .isBackgroundRecognitionEnabled
+        }
+
+        #expect(
+            !manager
+                .isBackgroundRecognitionEnabled
+        )
+
+        #expect(
+            backgroundMonitor
+                .stopAllCallCount == 1
+        )
+
+        #expect(
+            manager
+                .lastBackgroundErrorMessage != nil
+        )
+    }
+    
+    @Test
+    func authorizationLossStopsExistingBackgroundMonitoring()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider()
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let gym =
+            try makePlace(
+                name: "Gym",
+                latitude: 37.5665,
+                ssid: nil
+            )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .gpsConstrained,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    .init(),
+                backgroundMonitor:
+                    backgroundMonitor
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        locationProvider.authorizationStatus =
+            .denied
+
+        var receivedError:
+            BackgroundRecognitionManagerError?
+
+        do {
+
+            try await manager
+                .refreshBackgroundRecognition()
+
+            Issue.record(
+                "Expected authorization failure."
+            )
+
+        } catch let error
+            as BackgroundRecognitionManagerError {
+
+            receivedError = error
+
+        } catch {
+
+            Issue.record(
+                "Unexpected error: \(error)"
+            )
+        }
+
+        #expect(
+            receivedError
+                == .authorizationDenied
+        )
+
+        #expect(
+            !manager
+                .isBackgroundRecognitionEnabled
+        )
+
+        #expect(
+            backgroundMonitor
+                .stopAllCallCount == 1
+        )
+
+        // Authorization is checked before another
+        // location snapshot is requested.
+        #expect(
+            locationProvider
+                .requestCurrentLocationCallCount
+                == 1
+        )
+
+        #expect(
+            locationProvider
+                .locationUpdatesCallCount
+                == 0
+        )
+    }
+    
+    @Test
+    func transientLocationFailureKeepsExistingBackgroundMonitoring()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider()
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let gym =
+            try makePlace(
+                name: "Gym",
+                latitude: 37.5665,
+                ssid: nil
+            )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .gpsConstrained,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    .init(),
+                backgroundMonitor:
+                    backgroundMonitor
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        locationProvider
+            .requestCurrentLocationError =
+            PlaceVisitManagerBackgroundTestError
+                .locationUnavailable
+
+        do {
+
+            try await manager
+                .refreshBackgroundRecognition()
+
+            Issue.record(
+                "Expected location failure."
+            )
+
+        } catch {
+
+            // Expected.
+        }
+
+        #expect(
+            manager
+                .isBackgroundRecognitionEnabled
+        )
+
+        // Existing system monitoring must remain alive.
+        #expect(
+            backgroundMonitor
+                .stopAllCallCount == 0
+        )
+
+        #expect(
+            locationProvider
+                .requestCurrentLocationCallCount
+                == 2
+        )
+
+        #expect(
+            locationProvider
+                .locationUpdatesCallCount
+                == 0
+        )
+
+        locationProvider
+            .requestCurrentLocationError =
+            nil
+
+        await manager
+            .stopBackgroundRecognition()
+    }
 }
 
 private extension
@@ -1474,6 +1797,18 @@ private final class TestBackgroundRegionMonitor:
         self.pendingTriggers =
             pendingTriggers
     }
+    
+    func fail(
+        with error: any Error
+    ) {
+
+        eventContinuation?
+            .finish(
+                throwing: error
+            )
+
+        eventContinuation = nil
+    }
 
     func setCandidateRefreshMonitoringEnabled(
         _ enabled: Bool
@@ -1553,4 +1888,12 @@ private final class TestBackgroundRegionMonitor:
             trigger
         )
     }
+}
+
+private enum
+    PlaceVisitManagerBackgroundTestError:
+    Error {
+
+    case streamFailure
+    case locationUnavailable
 }
