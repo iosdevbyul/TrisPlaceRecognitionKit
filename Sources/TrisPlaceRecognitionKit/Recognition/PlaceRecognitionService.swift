@@ -97,6 +97,43 @@ public final class PlaceRecognitionService {
 
         return sorted(recognizedPlaces)
     }
+    
+    var locationAuthorizationStatus:
+        LocationAuthorizationStatus {
+
+        locationProvider.authorizationStatus
+    }
+
+    func requestAlwaysLocationAuthorization() {
+
+        locationProvider
+            .requestAlwaysAuthorization()
+    }
+
+    func fetchRegisteredPlacesForBackgroundMonitoring()
+        async throws -> [RegisteredPlace] {
+
+        try await placeStore.fetchAll()
+    }
+
+    func requestBackgroundMonitoringLocation()
+        async throws -> LocationPoint? {
+
+        let location =
+            try await locationProvider
+                .requestCurrentLocation()
+
+        guard PlaceLocationQualityValidator
+            .isAcceptable(
+                location,
+                policy: locationQualityPolicy
+            )
+        else {
+            return nil
+        }
+
+        return location
+    }
 
     // Let the consuming app choose its recognition policy.
     public func recognizeCurrentPlaces(
