@@ -108,6 +108,57 @@ public actor PlaceVisitCoordinator {
         return update
     }
 
+    // Used only after a background region transition
+    // has triggered a successful recognition request.
+    //
+    // The region event by itself must never be passed
+    // into the visit state machine as arrival/departure.
+    @discardableResult
+    func processVerifiedBackgroundObservation(
+        _ recognizedPlaces: [RecognizedPlace],
+        trigger: BackgroundRecognitionTrigger,
+        at timestamp: Date = Date()
+    ) async throws -> PlaceVisitUpdate {
+
+        await acquireOperation()
+
+        defer {
+            releaseOperation()
+        }
+
+        try Task.checkCancellation()
+
+        guard let machine else {
+            throw PlaceVisitCoordinatorError.notRestored
+        }
+
+        var candidate = machine
+
+        let update =
+            candidate
+                .processVerifiedBackgroundObservation(
+                    recognizedPlaces,
+                    trigger: trigger,
+                    at: timestamp
+                )
+
+        if !update.events.isEmpty
+            || !update.startedVisits.isEmpty
+            || !update.endedVisits.isEmpty {
+
+            try await store.apply(
+                update
+            )
+        }
+
+        // Preserve the same transactional behavior as
+        // foreground processing. Never advance the state
+        // machine if persistence fails.
+        self.machine = candidate
+
+        return update
+    }
+
     public func activeVisits() throws -> [PlaceVisitRecord] {
 
         guard let machine else {
