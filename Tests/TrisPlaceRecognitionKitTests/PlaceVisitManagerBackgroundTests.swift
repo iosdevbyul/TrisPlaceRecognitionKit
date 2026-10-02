@@ -956,10 +956,425 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
+    
+    @Test
+    func relaunchRestoresActiveVisitBeforeBufferedExitIsProcessed()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider(
+                network: nil
+            )
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let gym =
+            try makePlace(
+                name: "Gym",
+                latitude: 37.5665,
+                ssid: "GYM_WIFI"
+            )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let existingVisit =
+            try await seedActiveVisit(
+                place: gym,
+                store: visitStore
+            )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        // Simulate an exit event delivered while the app
+        // is being recreated after a background relaunch.
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor(
+                pendingTriggers: [
+                    .monitoredRegionExited(
+                        placeID: gym.id
+                    )
+                ]
+            )
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .wifiFirst,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    .init(),
+                backgroundMonitor:
+                    backgroundMonitor
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        await waitUntil {
+            manager.activeVisits.isEmpty
+        }
+
+        #expect(
+            manager.activeVisits.isEmpty
+        )
+
+        let visits =
+            try await visitStore.fetchAll()
+
+        let restoredVisit =
+            try #require(
+                visits.first {
+                    $0.id == existingVisit.id
+                }
+            )
+
+        #expect(
+            restoredVisit.endedAt != nil
+        )
+
+        let events =
+            try await visitStore.fetchEvents()
+
+        #expect(
+            events.count == 2
+        )
+
+        #expect(
+            events.first?.kind
+                == .arrived
+        )
+
+        #expect(
+            events.last?.kind
+                == .departed
+        )
+
+        // One snapshot is used to restore the monitored
+        // candidate set. The Wi-Fi recognition path doesn't
+        // require another GPS snapshot here.
+        #expect(
+            locationProvider
+                .requestCurrentLocationCallCount
+                == 1
+        )
+
+        #expect(
+            locationProvider
+                .locationUpdatesCallCount
+                == 0
+        )
+
+        await manager
+            .stopBackgroundRecognition()
+    }
+    
+    @Test
+    func relaunchProcessesBufferedEntryAfterListenerStarts()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider(
+                network: WiFiNetwork(
+                    ssid: "GYM_WIFI",
+                    bssid: nil
+                )
+            )
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let gym =
+            try makePlace(
+                name: "Gym",
+                latitude: 37.5665,
+                ssid: "GYM_WIFI"
+            )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor(
+                pendingTriggers: [
+                    .monitoredRegionEntered(
+                        placeID: gym.id
+                    )
+                ]
+            )
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .wifiFirst,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    .init(),
+                backgroundMonitor:
+                    backgroundMonitor
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        await waitUntil {
+            manager.activeVisits.count == 1
+        }
+
+        #expect(
+            manager.activeVisits
+                .first?
+                .placeID == gym.id
+        )
+
+        let events =
+            try await visitStore.fetchEvents()
+
+        #expect(
+            events.count == 1
+        )
+
+        #expect(
+            events.first?.kind
+                == .arrived
+        )
+
+        #expect(
+            locationProvider
+                .requestCurrentLocationCallCount
+                == 1
+        )
+
+        #expect(
+            locationProvider
+                .locationUpdatesCallCount
+                == 0
+        )
+
+        await manager
+            .stopBackgroundRecognition()
+    }
+    
+    @Test
+    func relaunchPrioritizesRestoredActiveVisitDuringCandidateSelection()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider()
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let nearby =
+            try makePlace(
+                name: "Near",
+                latitude: 37.5665,
+                ssid: nil
+            )
+
+        let activeFar =
+            try makePlace(
+                name: "Far",
+                latitude: 37.6500,
+                ssid: nil
+            )
+
+        try await placeStore.save(
+            nearby
+        )
+
+        try await placeStore.save(
+            activeFar
+        )
+
+        let existingVisit =
+            try await seedActiveVisit(
+                place: activeFar,
+                store: visitStore
+            )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .gpsConstrained,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    BackgroundRecognitionPolicy(
+                        maximumMonitoredPlaces: 1
+                    ),
+                backgroundMonitor:
+                    backgroundMonitor
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        #expect(
+            manager.activeVisits
+                == [
+                    existingVisit
+                ]
+        )
+
+        let monitoredBatch =
+            try #require(
+                backgroundMonitor
+                    .synchronizedRegionBatches
+                    .first
+            )
+
+        #expect(
+            monitoredBatch.count == 1
+        )
+
+        #expect(
+            monitoredBatch
+                .first?
+                .placeID == activeFar.id
+        )
+
+        #expect(
+            monitoredBatch
+                .first?
+                .placeID != nearby.id
+        )
+
+        #expect(
+            backgroundMonitor
+                .candidateRefreshMonitoringValues
+                == [
+                    true
+                ]
+        )
+
+        #expect(
+            locationProvider
+                .locationUpdatesCallCount
+                == 0
+        )
+
+        await manager
+            .stopBackgroundRecognition()
+    }
 }
 
 private extension
     PlaceVisitManagerBackgroundTests {
+    
+    func seedActiveVisit(
+        place: RegisteredPlace,
+        store: InMemoryPlaceVisitStore
+    ) async throws -> PlaceVisitRecord {
+
+        let record =
+            PlaceVisitRecord(
+                placeID: place.id,
+                startedAt:
+                    Date(
+                        timeIntervalSince1970:
+                            1_000_000
+                    ),
+                arrivalEvidence:
+                    place.networkIdentities.isEmpty
+                    ? .gpsOnlyNoWiFiConfigured
+                    : .ssid
+            )
+
+        let event =
+            PlaceVisitEvent(
+                visitID: record.id,
+                placeID: place.id,
+                kind: .arrived,
+                occurredAt:
+                    record.startedAt
+            )
+
+        try await store.apply(
+            PlaceVisitUpdate(
+                events: [
+                    event
+                ],
+                startedVisits: [
+                    record
+                ]
+            )
+        )
+
+        return record
+    }
 
     func makeAuthorizedLocationProvider()
         -> MockLocationProvider {
@@ -1037,11 +1452,29 @@ private final class TestBackgroundRegionMonitor:
 
     private(set)
     var stopAllCallCount = 0
-    
+
     private(set)
     var candidateRefreshMonitoringValues:
         [Bool] = []
-    
+
+    private var pendingTriggers:
+        [BackgroundRecognitionTrigger]
+
+    private var eventContinuation:
+        AsyncThrowingStream<
+            BackgroundRecognitionTrigger,
+            Error
+        >.Continuation?
+
+    init(
+        pendingTriggers:
+            [BackgroundRecognitionTrigger] = []
+    ) {
+
+        self.pendingTriggers =
+            pendingTriggers
+    }
+
     func setCandidateRefreshMonitoringEnabled(
         _ enabled: Bool
     ) async throws {
@@ -1051,12 +1484,6 @@ private final class TestBackgroundRegionMonitor:
                 enabled
             )
     }
-
-    private var eventContinuation:
-        AsyncThrowingStream<
-            BackgroundRecognitionTrigger,
-            Error
-        >.Continuation?
 
     func events()
         -> AsyncThrowingStream<
@@ -1069,6 +1496,18 @@ private final class TestBackgroundRegionMonitor:
 
             eventContinuation =
                 continuation
+
+            let bufferedTriggers =
+                pendingTriggers
+
+            pendingTriggers.removeAll()
+
+            for trigger in bufferedTriggers {
+
+                continuation.yield(
+                    trigger
+                )
+            }
         }
     }
 
@@ -1086,6 +1525,14 @@ private final class TestBackgroundRegionMonitor:
     func stopAll() async {
 
         stopAllCallCount += 1
+
+        pendingTriggers.removeAll()
+
+        eventContinuation?
+            .finish()
+
+        eventContinuation =
+            nil
     }
 
     func emit(
@@ -1093,9 +1540,17 @@ private final class TestBackgroundRegionMonitor:
             BackgroundRecognitionTrigger
     ) {
 
-        eventContinuation?
-            .yield(
+        guard let eventContinuation else {
+
+            pendingTriggers.append(
                 trigger
             )
+
+            return
+        }
+
+        eventContinuation.yield(
+            trigger
+        )
     }
 }
