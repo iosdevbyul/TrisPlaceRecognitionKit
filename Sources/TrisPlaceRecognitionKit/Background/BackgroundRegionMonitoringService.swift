@@ -38,7 +38,10 @@ final class BackgroundRegionMonitoringService {
     }
 
     func events()
-        -> AsyncStream<BackgroundRecognitionTrigger> {
+        -> AsyncThrowingStream<
+            BackgroundRecognitionTrigger,
+            Error
+        > {
 
         monitor.events()
     }

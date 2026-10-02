@@ -10,7 +10,10 @@ protocol BackgroundRegionMonitoring:
     AnyObject {
 
     func events()
-        -> AsyncStream<BackgroundRecognitionTrigger>
+        -> AsyncThrowingStream<
+            BackgroundRecognitionTrigger,
+            Error
+        >
 
     func synchronize(
         regions: [BackgroundMonitoredRegion]

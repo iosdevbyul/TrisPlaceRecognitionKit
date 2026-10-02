@@ -14,7 +14,8 @@ import Testing
 struct BackgroundRegionMonitoringServiceTests {
 
     @Test
-    func synchronizesCandidatesAsRegions() async throws {
+    func synchronizesCandidatesAsRegions()
+        async throws {
 
         let monitor =
             SpyBackgroundRegionMonitor()
@@ -44,8 +45,9 @@ struct BackgroundRegionMonitoringServiceTests {
         )
 
         #expect(
-            monitor.synchronizedRegionBatches.count
-                == 1
+            monitor
+                .synchronizedRegionBatches
+                .count == 1
         )
 
         let regions =
@@ -74,7 +76,8 @@ struct BackgroundRegionMonitoringServiceTests {
 
         #expect(
             regions[0].radius
-                == gym.place.location.recognitionRadius
+                == gym.place.location
+                    .recognitionRadius
         )
 
         #expect(
@@ -104,7 +107,9 @@ struct BackgroundRegionMonitoringServiceTests {
         )
 
         #expect(
-            monitor.synchronizedRegionBatches.isEmpty
+            monitor
+                .synchronizedRegionBatches
+                .isEmpty
         )
 
         #expect(
@@ -147,15 +152,17 @@ private extension
                 longitude: 126.9780,
                 recognitionRadius: 100
             ),
-            networkIdentity: PlaceNetworkIdentity(
-                ssid: nil,
-                bssid: nil
-            )
+            networkIdentity:
+                PlaceNetworkIdentity(
+                    ssid: nil,
+                    bssid: nil
+                )
         )
 
         return BackgroundMonitoringCandidate(
             place: place,
-            distanceMeters: distanceMeters
+            distanceMeters:
+                distanceMeters
         )
     }
 }
@@ -172,15 +179,21 @@ private final class SpyBackgroundRegionMonitor:
     var stopAllCallCount = 0
 
     func events()
-        -> AsyncStream<BackgroundRecognitionTrigger> {
+        -> AsyncThrowingStream<
+            BackgroundRecognitionTrigger,
+            Error
+        > {
 
-        AsyncStream { continuation in
+        AsyncThrowingStream {
+            continuation in
+
             continuation.finish()
         }
     }
 
     func synchronize(
-        regions: [BackgroundMonitoredRegion]
+        regions:
+            [BackgroundMonitoredRegion]
     ) async throws {
 
         synchronizedRegionBatches.append(
