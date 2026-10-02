@@ -25,6 +25,12 @@ final class CoreLocationBackgroundRegionMonitor:
                 Error
             >.Continuation
     ] = [:]
+    
+    private var pendingTriggers:
+        [BackgroundRecognitionTrigger] = []
+
+    private var pendingFailure:
+        BackgroundRegionMonitoringError?
 
     init() {
         client =
@@ -50,15 +56,39 @@ final class CoreLocationBackgroundRegionMonitor:
 
         AsyncThrowingStream { continuation in
 
+            if let pendingFailure {
+
+                self.pendingFailure = nil
+
+                continuation.finish(
+                    throwing: pendingFailure
+                )
+
+                return
+            }
+
             let id = UUID()
 
             eventContinuations[id] =
                 continuation
 
+            let bufferedTriggers =
+                pendingTriggers
+
+            pendingTriggers.removeAll()
+
+            for trigger in bufferedTriggers {
+
+                continuation.yield(
+                    trigger
+                )
+            }
+
             continuation.onTermination = {
                 [weak self] _ in
 
                 Task { @MainActor [weak self] in
+
                     self?
                         .eventContinuations
                         .removeValue(
@@ -190,6 +220,9 @@ final class CoreLocationBackgroundRegionMonitor:
 
     func stopAll() async {
 
+        pendingTriggers.removeAll()
+        pendingFailure = nil
+
         let ownedRegions =
             client
                 .monitoredRegions
@@ -202,6 +235,7 @@ final class CoreLocationBackgroundRegionMonitor:
                 }
 
         for region in ownedRegions {
+
             client.stopMonitoring(
                 for: region
             )
@@ -420,12 +454,22 @@ private extension
             BackgroundRecognitionTrigger
     ) {
 
+        guard !eventContinuations.isEmpty else {
+
+            pendingTriggers.append(
+                trigger
+            )
+
+            return
+        }
+
         let continuations =
             Array(
                 eventContinuations.values
             )
 
         for continuation in continuations {
+
             continuation.yield(
                 trigger
             )
@@ -437,6 +481,15 @@ private extension
             BackgroundRegionMonitoringError
     ) {
 
+        pendingTriggers.removeAll()
+
+        guard !eventContinuations.isEmpty else {
+
+            pendingFailure = error
+
+            return
+        }
+
         let continuations =
             Array(
                 eventContinuations.values
@@ -445,6 +498,7 @@ private extension
         eventContinuations.removeAll()
 
         for continuation in continuations {
+
             continuation.finish(
                 throwing: error
             )

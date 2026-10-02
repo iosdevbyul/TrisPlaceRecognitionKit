@@ -527,6 +527,155 @@ struct CoreLocationBackgroundRegionMonitorTests {
                 )
         )
     }
+    
+    @Test
+    func buffersRegionEventUntilEventStreamStarts()
+        async throws {
+
+        let client =
+            MockCoreLocationRegionMonitoringClient()
+
+        let monitor =
+            CoreLocationBackgroundRegionMonitor(
+                client: client
+            )
+
+        let placeID = UUID()
+
+        let region =
+            makeSystemRegion(
+                placeID: placeID,
+                latitude: 37.5665,
+                radius: 100
+            )
+
+        // Simulate the system delivering the region
+        // transition before the app has recreated its
+        // event-consumption task after relaunch.
+        client.simulateEnter(
+            region
+        )
+
+        let stream =
+            monitor.events()
+
+        var iterator =
+            stream.makeAsyncIterator()
+
+        let event =
+            try await iterator.next()
+
+        #expect(
+            event
+                == .monitoredRegionEntered(
+                    placeID: placeID
+                )
+        )
+    }
+    
+    @Test
+    func buffersExitEventUntilEventStreamStarts()
+        async throws {
+
+        let client =
+            MockCoreLocationRegionMonitoringClient()
+
+        let monitor =
+            CoreLocationBackgroundRegionMonitor(
+                client: client
+            )
+
+        let placeID = UUID()
+
+        let region =
+            makeSystemRegion(
+                placeID: placeID,
+                latitude: 37.5665,
+                radius: 100
+            )
+
+        client.simulateExit(
+            region
+        )
+
+        let stream =
+            monitor.events()
+
+        var iterator =
+            stream.makeAsyncIterator()
+
+        let event =
+            try await iterator.next()
+
+        #expect(
+            event
+                == .monitoredRegionExited(
+                    placeID: placeID
+                )
+        )
+    }
+    
+    @Test
+    func buffersMonitoringFailureUntilEventStreamStarts()
+        async {
+
+        let client =
+            MockCoreLocationRegionMonitoringClient()
+
+        let monitor =
+            CoreLocationBackgroundRegionMonitor(
+                client: client
+            )
+
+        let placeID = UUID()
+
+        let region =
+            makeSystemRegion(
+                placeID: placeID,
+                latitude: 37.5665,
+                radius: 100
+            )
+
+        client.simulateFailure(
+            region
+        )
+
+        let stream =
+            monitor.events()
+
+        var iterator =
+            stream.makeAsyncIterator()
+
+        var receivedError:
+            BackgroundRegionMonitoringError?
+
+        do {
+
+            _ = try await iterator.next()
+
+            Issue.record(
+                "Expected buffered monitoring failure."
+            )
+
+        } catch let error
+            as BackgroundRegionMonitoringError {
+
+            receivedError = error
+
+        } catch {
+
+            Issue.record(
+                "Received unexpected error: \(error)"
+            )
+        }
+
+        #expect(
+            receivedError
+                == .systemMonitoringFailed(
+                    placeID: placeID
+                )
+        )
+    }
 }
 
 private extension
