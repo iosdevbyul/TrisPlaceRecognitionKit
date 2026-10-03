@@ -9,9 +9,20 @@ import SwiftUI
 
 @main
 struct TrisPlaceRecognitionDemoApp: App {
+
+    @UIApplicationDelegateAdaptor(
+        DemoAppDelegate.self
+    )
+    private var appDelegate
+
     var body: some Scene {
+
         WindowGroup {
-            ContentView()
+
+            ContentView(
+                environment:
+                    appDelegate.environment
+            )
         }
     }
 }
