@@ -91,7 +91,7 @@ struct PlaceVisitManagerTests {
     }
 
     @Test
-    func refreshBeforeStartRestoresAutomatically() async throws {
+    func refreshBeforeStartRestoresAndStartsMonitoring() async throws {
 
         let locationProvider = MockLocationProvider()
 
@@ -132,7 +132,7 @@ struct PlaceVisitManagerTests {
 
         try await manager.refresh()
 
-        #expect(!manager.isMonitoring)
+        #expect(manager.isMonitoring)
 
         #expect(
             manager.recognizedPlaces.count == 1

@@ -5,13 +5,6 @@
 //  Created by COMATOKI on 2026-09-27.
 //
 
-//
-//  ContentView.swift
-//  TrisPlaceRecognitionDemo
-//
-//  Created by COMATOKI on 2026-09-27.
-//
-
 import SwiftUI
 import TrisPlaceRecognitionKit
 
@@ -25,7 +18,8 @@ struct ContentView: View {
     var environment:
         DemoEnvironment
 
-    var body: some View {
+    var body:
+        some View {
 
         Group {
 
@@ -40,11 +34,11 @@ struct ContentView: View {
                         placeStore:
                             store,
                         locationProvider:
-                            environment
-                                .locationProvider,
+                            environment.locationProvider,
                         wifiProvider:
-                            environment
-                                .wifiProvider
+                            environment.wifiProvider,
+                        visitManager:
+                            visitManager
                     )
                     .tabItem {
 
@@ -87,6 +81,11 @@ struct ContentView: View {
                         )
                     }
                 }
+                .task {
+
+                    try? await visitManager
+                        .refresh()
+                }
 
             } else {
 
@@ -94,11 +93,13 @@ struct ContentView: View {
             }
         }
         .onChange(
-            of: scenePhase
-        ) { phase in
+            of:
+                scenePhase
+        ) { _, newPhase in
 
             guard
-                phase == .active
+                newPhase
+                    == .active
             else {
                 return
             }
@@ -107,13 +108,19 @@ struct ContentView: View {
 
                 await environment
                     .retryBackgroundRecognition()
+
+                if let visitManager =
+                    environment.visitManager {
+
+                    try? await visitManager
+                        .refresh()
+                }
             }
         }
     }
 }
 
-private extension
-    ContentView {
+private extension ContentView {
 
     var preparationView:
         some View {
@@ -140,8 +147,7 @@ private extension
             )
 
             if let error =
-                environment
-                    .errorMessage {
+                environment.errorMessage {
 
                 Text(
                     error
@@ -154,8 +160,7 @@ private extension
                 )
             }
 
-            if environment
-                .isPreparing {
+            if environment.isPreparing {
 
                 ProgressView(
                     "준비 중"

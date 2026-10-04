@@ -9,426 +9,765 @@ import Foundation
 import SwiftData
 
 @available(iOS 17.0, *)
-public actor SwiftDataPlaceVisitStore: PlaceVisitStoring {
-
-    private let modelContainer: ModelContainer
-
-    public init(
-        modelContainer: ModelContainer
-    ) {
-        self.modelContainer = modelContainer
-    }
+@ModelActor
+public actor SwiftDataPlaceVisitStore:
+    PlaceVisitStoring {
 
     public init() throws {
-        let schema = Schema([
-            StoredPlaceVisit.self,
-            StoredPlaceVisitEvent.self
-        ])
 
-        let applicationSupportURL = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
+        let schema =
+            Schema([
+                StoredPlaceVisit.self,
+                StoredPlaceVisitEvent.self
+            ])
 
-        let directoryURL = applicationSupportURL
-            .appendingPathComponent(
-                "TrisPlaceRecognitionKit",
-                isDirectory: true
+        let applicationSupportURL =
+            try FileManager.default.url(
+                for:
+                    .applicationSupportDirectory,
+                in:
+                    .userDomainMask,
+                appropriateFor:
+                    nil,
+                create:
+                    true
             )
 
-        try FileManager.default.createDirectory(
-            at: directoryURL,
-            withIntermediateDirectories: true
-        )
+        let directoryURL =
+            applicationSupportURL
+                .appendingPathComponent(
+                    "TrisPlaceRecognitionKit",
+                    isDirectory:
+                        true
+                )
 
-        let databaseURL = directoryURL
-            .appendingPathComponent("place-visits.sqlite")
+        try FileManager.default
+            .createDirectory(
+                at:
+                    directoryURL,
+                withIntermediateDirectories:
+                    true
+            )
 
-        let configuration = ModelConfiguration(
-            schema: schema,
-            url: databaseURL,
-            cloudKitDatabase: .none
-        )
+        let databaseURL =
+            directoryURL
+                .appendingPathComponent(
+                    "place-visits.sqlite"
+                )
 
-        self.modelContainer = try ModelContainer(
-            for: schema,
-            configurations: [configuration]
+        let configuration =
+            ModelConfiguration(
+                schema:
+                    schema,
+                url:
+                    databaseURL,
+                cloudKitDatabase:
+                    .none
+            )
+
+        let container =
+            try ModelContainer(
+                for:
+                    schema,
+                configurations: [
+                    configuration
+                ]
+            )
+
+        self.init(
+            modelContainer:
+                container
         )
     }
 
     public func apply(
-        _ update: PlaceVisitUpdate
+        _ update:
+            PlaceVisitUpdate
     ) async throws {
 
         if update.events.isEmpty,
            update.startedVisits.isEmpty,
            update.endedVisits.isEmpty {
+
             return
         }
 
-        let context = ModelContext(modelContainer)
+        let storedVisits =
+            try modelContext
+                .fetch(
+                    FetchDescriptor<
+                        StoredPlaceVisit
+                    >()
+                )
 
-        let storedVisits = try context.fetch(
-            FetchDescriptor<StoredPlaceVisit>()
-        )
+        let storedEvents =
+            try modelContext
+                .fetch(
+                    FetchDescriptor<
+                        StoredPlaceVisitEvent
+                    >()
+                )
 
-        let storedEvents = try context.fetch(
-            FetchDescriptor<StoredPlaceVisitEvent>()
-        )
+        var visitModelsByID:
+            [UUID: StoredPlaceVisit] = [:]
 
-        var visitModelsByID: [UUID: StoredPlaceVisit] = [:]
-        var nextVisits: [UUID: PlaceVisitRecord] = [:]
+        var nextVisits:
+            [UUID: PlaceVisitRecord] = [:]
 
         for model in storedVisits {
-            let record = try makeVisitRecord(from: model)
 
-            guard nextVisits[record.id] == nil else {
-                throw PlaceVisitStorageError.duplicateVisit
+            let record =
+                try makeVisitRecord(
+                    from:
+                        model
+                )
+
+            guard
+                nextVisits[
+                    record.id
+                ] == nil
+            else {
+
+                throw PlaceVisitStorageError
+                    .duplicateVisit
             }
 
-            visitModelsByID[record.id] = model
-            nextVisits[record.id] = record
+            visitModelsByID[
+                record.id
+            ] = model
+
+            nextVisits[
+                record.id
+            ] = record
         }
 
-        var existingEventIDs = Set<UUID>()
-        var existingEventKeys = Set<VisitEventKey>()
+        var existingEventIDs =
+            Set<UUID>()
+
+        var existingEventKeys =
+            Set<VisitEventKey>()
 
         for model in storedEvents {
-            let event = try makeVisitEvent(from: model)
 
-            guard existingEventIDs.insert(event.id).inserted else {
-                throw PlaceVisitStorageError.duplicateEvent
+            let event =
+                try makeVisitEvent(
+                    from:
+                        model
+                )
+
+            guard
+                existingEventIDs
+                    .insert(
+                        event.id
+                    )
+                    .inserted
+            else {
+
+                throw PlaceVisitStorageError
+                    .duplicateEvent
             }
 
-            let key = VisitEventKey(
-                visitID: event.visitID,
-                kindRawValue: event.kind.rawValue
-            )
+            let key =
+                VisitEventKey(
+                    visitID:
+                        event.visitID,
+                    kindRawValue:
+                        event.kind.rawValue
+                )
 
-            guard existingEventKeys.insert(key).inserted else {
-                throw PlaceVisitStorageError.duplicateEvent
+            guard
+                existingEventKeys
+                    .insert(
+                        key
+                    )
+                    .inserted
+            else {
+
+                throw PlaceVisitStorageError
+                    .duplicateEvent
             }
         }
 
-        var expectedEvents: [VisitEventKey: Date] = [:]
+        var expectedEvents:
+            [VisitEventKey: Date] = [:]
 
         // MARK: - Validate Started Visits
 
-        for record in update.startedVisits {
+        for record in update
+            .startedVisits {
 
-            guard record.endedAt == nil,
-                  record.startedAt.timeIntervalSince1970.isFinite else {
-                throw PlaceVisitStorageError.invalidVisitRecord
+            guard
+                record.endedAt == nil,
+                record.startedAt
+                    .timeIntervalSince1970
+                    .isFinite
+            else {
+
+                throw PlaceVisitStorageError
+                    .invalidVisitRecord
             }
 
-            guard nextVisits[record.id] == nil else {
-                throw PlaceVisitStorageError.duplicateVisit
+            guard
+                nextVisits[
+                    record.id
+                ] == nil
+            else {
+
+                throw PlaceVisitStorageError
+                    .duplicateVisit
             }
 
-            let hasActiveVisit = nextVisits.values.contains {
-                $0.placeID == record.placeID && $0.isActive
+            let hasActiveVisit =
+                nextVisits
+                    .values
+                    .contains {
+
+                        $0.placeID
+                            == record.placeID
+                        && $0.isActive
+                    }
+
+            guard
+                !hasActiveVisit
+            else {
+
+                throw PlaceVisitStorageError
+                    .activeVisitAlreadyExists
             }
 
-            guard !hasActiveVisit else {
-                throw PlaceVisitStorageError.activeVisitAlreadyExists
-            }
+            nextVisits[
+                record.id
+            ] = record
 
-            nextVisits[record.id] = record
+            let key =
+                VisitEventKey(
+                    visitID:
+                        record.id,
+                    kindRawValue:
+                        PlaceVisitEvent
+                            .Kind
+                            .arrived
+                            .rawValue
+                )
 
-            let key = VisitEventKey(
-                visitID: record.id,
-                kindRawValue: PlaceVisitEvent.Kind.arrived.rawValue
-            )
-
-            expectedEvents[key] = record.startedAt
+            expectedEvents[
+                key
+            ] = record.startedAt
         }
 
         // MARK: - Validate Ended Visits
 
-        for record in update.endedVisits {
+        for record in update
+            .endedVisits {
 
-            guard let existing = nextVisits[record.id] else {
-                throw PlaceVisitStorageError.visitNotFound
+            guard
+                let existing =
+                    nextVisits[
+                        record.id
+                    ]
+            else {
+
+                throw PlaceVisitStorageError
+                    .visitNotFound
             }
 
-            guard existing.isActive else {
-                throw PlaceVisitStorageError.visitAlreadyEnded
+            guard
+                existing.isActive
+            else {
+
+                throw PlaceVisitStorageError
+                    .visitAlreadyEnded
             }
 
-            guard let endedAt = record.endedAt,
-                  endedAt.timeIntervalSince1970.isFinite,
-                  endedAt >= existing.startedAt,
-                  record.placeID == existing.placeID,
-                  record.startedAt == existing.startedAt,
-                  record.arrivalEvidence == existing.arrivalEvidence else {
-                throw PlaceVisitStorageError.invalidVisitRecord
+            guard
+                let endedAt =
+                    record.endedAt,
+                endedAt
+                    .timeIntervalSince1970
+                    .isFinite,
+                endedAt
+                    >= existing.startedAt,
+                record.placeID
+                    == existing.placeID,
+                record.startedAt
+                    == existing.startedAt,
+                record.arrivalEvidence
+                    == existing.arrivalEvidence
+            else {
+
+                throw PlaceVisitStorageError
+                    .invalidVisitRecord
             }
 
-            nextVisits[record.id] = record
+            nextVisits[
+                record.id
+            ] = record
 
-            let key = VisitEventKey(
-                visitID: record.id,
-                kindRawValue: PlaceVisitEvent.Kind.departed.rawValue
-            )
+            let key =
+                VisitEventKey(
+                    visitID:
+                        record.id,
+                    kindRawValue:
+                        PlaceVisitEvent
+                            .Kind
+                            .departed
+                            .rawValue
+                )
 
-            expectedEvents[key] = endedAt
+            expectedEvents[
+                key
+            ] = endedAt
         }
 
         // MARK: - Validate Events
 
-        guard update.events.count == expectedEvents.count else {
-            throw PlaceVisitStorageError.invalidVisitEvent
+        guard
+            update.events.count
+                == expectedEvents.count
+        else {
+
+            throw PlaceVisitStorageError
+                .invalidVisitEvent
         }
 
-        var nextEventIDs = existingEventIDs
-        var nextEventKeys = existingEventKeys
+        var nextEventIDs =
+            existingEventIDs
+
+        var nextEventKeys =
+            existingEventKeys
 
         for event in update.events {
 
-            guard nextEventIDs.insert(event.id).inserted else {
-                throw PlaceVisitStorageError.duplicateEvent
+            guard
+                nextEventIDs
+                    .insert(
+                        event.id
+                    )
+                    .inserted
+            else {
+
+                throw PlaceVisitStorageError
+                    .duplicateEvent
             }
 
-            guard let visit = nextVisits[event.visitID],
-                  visit.placeID == event.placeID,
-                  event.occurredAt.timeIntervalSince1970.isFinite else {
-                throw PlaceVisitStorageError.invalidVisitEvent
+            guard
+                let visit =
+                    nextVisits[
+                        event.visitID
+                    ],
+                visit.placeID
+                    == event.placeID,
+                event.occurredAt
+                    .timeIntervalSince1970
+                    .isFinite
+            else {
+
+                throw PlaceVisitStorageError
+                    .invalidVisitEvent
             }
 
-            let key = VisitEventKey(
-                visitID: event.visitID,
-                kindRawValue: event.kind.rawValue
-            )
+            let key =
+                VisitEventKey(
+                    visitID:
+                        event.visitID,
+                    kindRawValue:
+                        event.kind.rawValue
+                )
 
-            guard let expectedTime = expectedEvents.removeValue(
-                forKey: key
-            ),
-            expectedTime == event.occurredAt else {
-                throw PlaceVisitStorageError.invalidVisitEvent
+            guard
+                let expectedTime =
+                    expectedEvents
+                        .removeValue(
+                            forKey:
+                                key
+                        ),
+                expectedTime
+                    == event.occurredAt
+            else {
+
+                throw PlaceVisitStorageError
+                    .invalidVisitEvent
             }
 
-            guard nextEventKeys.insert(key).inserted else {
-                throw PlaceVisitStorageError.duplicateEvent
+            guard
+                nextEventKeys
+                    .insert(
+                        key
+                    )
+                    .inserted
+            else {
+
+                throw PlaceVisitStorageError
+                    .duplicateEvent
             }
         }
 
-        guard expectedEvents.isEmpty else {
-            throw PlaceVisitStorageError.invalidVisitEvent
+        guard
+            expectedEvents.isEmpty
+        else {
+
+            throw PlaceVisitStorageError
+                .invalidVisitEvent
         }
 
         // MARK: - Persist Validated Updates
 
-        // No SwiftData model is inserted or modified
-        // until the entire update passes validation.
+        for record in update
+            .startedVisits {
 
-        for record in update.startedVisits {
-
-            let model = StoredPlaceVisit(
-                id: record.id,
-                placeID: record.placeID,
-                startedAt: record.startedAt,
-                endedAt: nil,
-                arrivalEvidenceRawValue: evidenceRawValue(
-                    record.arrivalEvidence
+            let model =
+                StoredPlaceVisit(
+                    id:
+                        record.id,
+                    placeID:
+                        record.placeID,
+                    startedAt:
+                        record.startedAt,
+                    endedAt:
+                        nil,
+                    arrivalEvidenceRawValue:
+                        evidenceRawValue(
+                            record
+                                .arrivalEvidence
+                        )
                 )
-            )
 
-            context.insert(model)
+            modelContext
+                .insert(
+                    model
+                )
 
-            visitModelsByID[record.id] = model
+            visitModelsByID[
+                record.id
+            ] = model
         }
 
-        for record in update.endedVisits {
+        for record in update
+            .endedVisits {
 
-            guard let model = visitModelsByID[record.id] else {
-                throw PlaceVisitStorageError.visitNotFound
+            guard
+                let model =
+                    visitModelsByID[
+                        record.id
+                    ]
+            else {
+
+                modelContext
+                    .rollback()
+
+                throw PlaceVisitStorageError
+                    .visitNotFound
             }
 
-            model.endedAt = record.endedAt
+            model.endedAt =
+                record.endedAt
         }
 
         for event in update.events {
 
-            let model = StoredPlaceVisitEvent(
-                id: event.id,
-                visitID: event.visitID,
-                placeID: event.placeID,
-                kindRawValue: event.kind.rawValue,
-                occurredAt: event.occurredAt
-            )
+            let model =
+                StoredPlaceVisitEvent(
+                    id:
+                        event.id,
+                    visitID:
+                        event.visitID,
+                    placeID:
+                        event.placeID,
+                    kindRawValue:
+                        event.kind.rawValue,
+                    occurredAt:
+                        event.occurredAt
+                )
 
-            context.insert(model)
+            modelContext
+                .insert(
+                    model
+                )
         }
 
-        // Save visit records and events together.
-        try context.save()
+        do {
+
+            try modelContext
+                .save()
+
+        } catch {
+
+            modelContext
+                .rollback()
+
+            throw error
+        }
     }
 
-    public func fetchAll() async throws -> [PlaceVisitRecord] {
+    public func fetchAll()
+        async throws
+        -> [PlaceVisitRecord] {
 
-        let context = ModelContext(modelContainer)
+        let models =
+            try modelContext
+                .fetch(
+                    FetchDescriptor<
+                        StoredPlaceVisit
+                    >()
+                )
 
-        let models = try context.fetch(
-            FetchDescriptor<StoredPlaceVisit>()
-        )
+        let records =
+            try models.map {
 
-        let records = try models.map {
-            try makeVisitRecord(from: $0)
-        }
-
-        return sortedVisits(records)
-    }
-
-    public func fetchActiveVisits() async throws -> [PlaceVisitRecord] {
-
-        let context = ModelContext(modelContainer)
-
-        let models = try context.fetch(
-            FetchDescriptor<StoredPlaceVisit>()
-        )
-
-        let records = try models.map {
-            try makeVisitRecord(from: $0)
-        }
-
-        return sortedVisits(
-            records.filter(\.isActive)
-        )
-    }
-
-    public func fetchEvents() async throws -> [PlaceVisitEvent] {
-
-        let context = ModelContext(modelContainer)
-
-        let models = try context.fetch(
-            FetchDescriptor<StoredPlaceVisitEvent>()
-        )
-
-        let events = try models.map {
-            try makeVisitEvent(from: $0)
-        }
-
-        return events.sorted { lhs, rhs in
-            if lhs.occurredAt != rhs.occurredAt {
-                return lhs.occurredAt < rhs.occurredAt
+                try makeVisitRecord(
+                    from:
+                        $0
+                )
             }
 
-            return lhs.id.uuidString < rhs.id.uuidString
+        return sortedVisits(
+            records
+        )
+    }
+
+    public func fetchActiveVisits()
+        async throws
+        -> [PlaceVisitRecord] {
+
+        let models =
+            try modelContext
+                .fetch(
+                    FetchDescriptor<
+                        StoredPlaceVisit
+                    >()
+                )
+
+        let records =
+            try models.map {
+
+                try makeVisitRecord(
+                    from:
+                        $0
+                )
+            }
+
+        return sortedVisits(
+            records.filter(
+                \.isActive
+            )
+        )
+    }
+
+    public func fetchEvents()
+        async throws
+        -> [PlaceVisitEvent] {
+
+        let models =
+            try modelContext
+                .fetch(
+                    FetchDescriptor<
+                        StoredPlaceVisitEvent
+                    >()
+                )
+
+        let events =
+            try models.map {
+
+                try makeVisitEvent(
+                    from:
+                        $0
+                )
+            }
+
+        return events.sorted {
+            lhs,
+            rhs in
+
+            if lhs.occurredAt
+                != rhs.occurredAt {
+
+                return lhs.occurredAt
+                    < rhs.occurredAt
+            }
+
+            return lhs.id.uuidString
+                < rhs.id.uuidString
         }
     }
 }
 
 @available(iOS 17.0, *)
-private extension SwiftDataPlaceVisitStore {
+private extension
+    SwiftDataPlaceVisitStore {
 
-    struct VisitEventKey: Hashable {
-        let visitID: UUID
-        let kindRawValue: String
+    struct VisitEventKey:
+        Hashable {
+
+        let visitID:
+            UUID
+
+        let kindRawValue:
+            String
     }
 
     func sortedVisits(
-        _ records: [PlaceVisitRecord]
+        _ records:
+            [PlaceVisitRecord]
     ) -> [PlaceVisitRecord] {
 
-        records.sorted { lhs, rhs in
-            if lhs.startedAt != rhs.startedAt {
-                return lhs.startedAt < rhs.startedAt
+        records.sorted {
+            lhs,
+            rhs in
+
+            if lhs.startedAt
+                != rhs.startedAt {
+
+                return lhs.startedAt
+                    < rhs.startedAt
             }
 
-            return lhs.id.uuidString < rhs.id.uuidString
+            return lhs.id.uuidString
+                < rhs.id.uuidString
         }
     }
 
     func evidenceRawValue(
-        _ evidence: PlaceRecognitionEvidence
+        _ evidence:
+            PlaceRecognitionEvidence
     ) -> String {
 
         switch evidence {
 
         case .bssid:
+
             return "bssid"
 
         case .ssid:
+
             return "ssid"
 
         case .gpsOnlyWiFiUnavailable:
+
             return "gpsOnlyWiFiUnavailable"
 
         case .gpsOnlyNoWiFiConfigured:
+
             return "gpsOnlyNoWiFiConfigured"
         }
     }
 
     func makeEvidence(
-        from rawValue: String
-    ) throws -> PlaceRecognitionEvidence {
+        from rawValue:
+            String
+    ) throws
+        -> PlaceRecognitionEvidence {
 
         switch rawValue {
 
         case "bssid":
+
             return .bssid
 
         case "ssid":
+
             return .ssid
 
         case "gpsOnlyWiFiUnavailable":
+
             return .gpsOnlyWiFiUnavailable
 
         case "gpsOnlyNoWiFiConfigured":
+
             return .gpsOnlyNoWiFiConfigured
 
         default:
-            throw PlaceVisitStorageError.invalidVisitRecord
+
+            throw PlaceVisitStorageError
+                .invalidVisitRecord
         }
     }
 
     func makeVisitRecord(
-        from model: StoredPlaceVisit
-    ) throws -> PlaceVisitRecord {
+        from model:
+            StoredPlaceVisit
+    ) throws
+        -> PlaceVisitRecord {
 
-        guard model.startedAt.timeIntervalSince1970.isFinite else {
-            throw PlaceVisitStorageError.invalidVisitRecord
+        guard
+            model.startedAt
+                .timeIntervalSince1970
+                .isFinite
+        else {
+
+            throw PlaceVisitStorageError
+                .invalidVisitRecord
         }
 
-        if let endedAt = model.endedAt {
-            guard endedAt.timeIntervalSince1970.isFinite,
-                  endedAt >= model.startedAt else {
-                throw PlaceVisitStorageError.invalidVisitRecord
+        if let endedAt =
+            model.endedAt {
+
+            guard
+                endedAt
+                    .timeIntervalSince1970
+                    .isFinite,
+                endedAt
+                    >= model.startedAt
+            else {
+
+                throw PlaceVisitStorageError
+                    .invalidVisitRecord
             }
         }
 
-        let evidence = try makeEvidence(
-            from: model.arrivalEvidenceRawValue
-        )
+        let evidence =
+            try makeEvidence(
+                from:
+                    model
+                        .arrivalEvidenceRawValue
+            )
 
         return PlaceVisitRecord(
-            id: model.id,
-            placeID: model.placeID,
-            startedAt: model.startedAt,
-            endedAt: model.endedAt,
-            arrivalEvidence: evidence
+            id:
+                model.id,
+            placeID:
+                model.placeID,
+            startedAt:
+                model.startedAt,
+            endedAt:
+                model.endedAt,
+            arrivalEvidence:
+                evidence
         )
     }
 
     func makeVisitEvent(
-        from model: StoredPlaceVisitEvent
-    ) throws -> PlaceVisitEvent {
+        from model:
+            StoredPlaceVisitEvent
+    ) throws
+        -> PlaceVisitEvent {
 
-        guard let kind = PlaceVisitEvent.Kind(
-            rawValue: model.kindRawValue
-        ),
-        model.occurredAt.timeIntervalSince1970.isFinite else {
-            throw PlaceVisitStorageError.invalidVisitEvent
+        guard
+            let kind =
+                PlaceVisitEvent
+                    .Kind(
+                        rawValue:
+                            model.kindRawValue
+                    ),
+            model.occurredAt
+                .timeIntervalSince1970
+                .isFinite
+        else {
+
+            throw PlaceVisitStorageError
+                .invalidVisitEvent
         }
 
         return PlaceVisitEvent(
-            id: model.id,
-            visitID: model.visitID,
-            placeID: model.placeID,
-            kind: kind,
-            occurredAt: model.occurredAt
+            id:
+                model.id,
+            visitID:
+                model.visitID,
+            placeID:
+                model.placeID,
+            kind:
+                kind,
+            occurredAt:
+                model.occurredAt
         )
     }
 }

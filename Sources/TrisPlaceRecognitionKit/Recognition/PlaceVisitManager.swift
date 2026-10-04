@@ -13,23 +13,28 @@ import TrisLocationKit
 public final class PlaceVisitManager: ObservableObject {
 
     @Published
-    public private(set) var recognizedPlaces: [RecognizedPlace] = []
+    public private(set)
+    var recognizedPlaces: [RecognizedPlace] = []
 
     @Published
-    public private(set) var activeVisits: [PlaceVisitRecord] = []
+    public private(set)
+    var activeVisits: [PlaceVisitRecord] = []
 
     @Published
-    public private(set) var isMonitoring = false
+    public private(set)
+    var isMonitoring = false
 
     @Published
     public private(set)
     var isBackgroundRecognitionEnabled = false
 
     @Published
-    public private(set) var lastErrorMessage: String?
+    public private(set)
+    var lastErrorMessage: String?
 
     @Published
-    public private(set) var lastVisitErrorMessage: String?
+    public private(set)
+    var lastVisitErrorMessage: String?
 
     @Published
     public private(set)
@@ -56,6 +61,9 @@ public final class PlaceVisitManager: ObservableObject {
     private let backgroundEventProcessor:
         BackgroundRecognitionEventProcessor
 
+    private let diagnosticStore:
+        any PlaceVisitDiagnosticStoring
+
     private var backgroundEventTask:
         Task<Void, Never>?
 
@@ -64,26 +72,40 @@ public final class PlaceVisitManager: ObservableObject {
 
     private var hasRestoredVisits = false
 
+    // MARK: - Init
+
     public convenience init(
-        recognitionService: PlaceRecognitionService,
-        visitStore: any PlaceVisitStoring,
-        recognitionPolicy: PlaceRecognitionPolicy = .gpsConstrained,
-        visitPolicy: PlaceVisitPolicy = .init(),
-        refreshInterval: TimeInterval = 15,
+        recognitionService:
+            PlaceRecognitionService,
+        visitStore:
+            any PlaceVisitStoring,
+        recognitionPolicy:
+            PlaceRecognitionPolicy = .gpsConstrained,
+        visitPolicy:
+            PlaceVisitPolicy = .init(),
+        refreshInterval:
+            TimeInterval = 15,
         backgroundRecognitionPolicy:
             BackgroundRecognitionPolicy = .init()
     ) {
 
         self.init(
-            recognitionService: recognitionService,
-            visitStore: visitStore,
-            recognitionPolicy: recognitionPolicy,
-            visitPolicy: visitPolicy,
-            refreshInterval: refreshInterval,
+            recognitionService:
+                recognitionService,
+            visitStore:
+                visitStore,
+            recognitionPolicy:
+                recognitionPolicy,
+            visitPolicy:
+                visitPolicy,
+            refreshInterval:
+                refreshInterval,
             backgroundRecognitionPolicy:
                 backgroundRecognitionPolicy,
             backgroundMonitor:
-                CoreLocationBackgroundRegionMonitor()
+                CoreLocationBackgroundRegionMonitor(),
+            diagnosticStore:
+                FilePlaceVisitDiagnosticLogger()
         )
     }
 
@@ -96,13 +118,26 @@ public final class PlaceVisitManager: ObservableObject {
         backgroundRecognitionPolicy:
             BackgroundRecognitionPolicy,
         backgroundMonitor:
-            any BackgroundRegionMonitoring
+            any BackgroundRegionMonitoring,
+        diagnosticStore:
+            any PlaceVisitDiagnosticStoring =
+                NoOpPlaceVisitDiagnosticStore()
     ) {
+
+        let diagnosticVisitStore =
+            DiagnosticPlaceVisitStore(
+                base:
+                    visitStore,
+                diagnosticStore:
+                    diagnosticStore
+            )
 
         let coordinator =
             PlaceVisitCoordinator(
-                store: visitStore,
-                policy: visitPolicy
+                store:
+                    diagnosticVisitStore,
+                policy:
+                    visitPolicy
             )
 
         let monitor =
@@ -119,7 +154,7 @@ public final class PlaceVisitManager: ObservableObject {
             recognitionService
 
         self.visitStore =
-            visitStore
+            diagnosticVisitStore
 
         self.coordinator =
             coordinator
@@ -132,7 +167,8 @@ public final class PlaceVisitManager: ObservableObject {
 
         self.backgroundMonitoringService =
             BackgroundRegionMonitoringService(
-                monitor: backgroundMonitor
+                monitor:
+                    backgroundMonitor
             )
 
         self.backgroundEventProcessor =
@@ -144,6 +180,9 @@ public final class PlaceVisitManager: ObservableObject {
                 recognitionPolicy:
                     recognitionPolicy
             )
+
+        self.diagnosticStore =
+            diagnosticStore
 
         bindMonitor()
 
@@ -157,17 +196,22 @@ public final class PlaceVisitManager: ObservableObject {
             try await self
                 .processSuccessfulObservation(
                     places,
-                    at: observedAt
+                    at:
+                        observedAt
                 )
         }
     }
 
     @available(iOS 17.0, *)
     public convenience init(
-        recognitionService: PlaceRecognitionService,
-        recognitionPolicy: PlaceRecognitionPolicy = .gpsConstrained,
-        visitPolicy: PlaceVisitPolicy = .init(),
-        refreshInterval: TimeInterval = 15,
+        recognitionService:
+            PlaceRecognitionService,
+        recognitionPolicy:
+            PlaceRecognitionPolicy = .gpsConstrained,
+        visitPolicy:
+            PlaceVisitPolicy = .init(),
+        refreshInterval:
+            TimeInterval = 15,
         backgroundRecognitionPolicy:
             BackgroundRecognitionPolicy = .init()
     ) throws {
@@ -187,7 +231,11 @@ public final class PlaceVisitManager: ObservableObject {
             refreshInterval:
                 refreshInterval,
             backgroundRecognitionPolicy:
-                backgroundRecognitionPolicy
+                backgroundRecognitionPolicy,
+            backgroundMonitor:
+                CoreLocationBackgroundRegionMonitor(),
+            diagnosticStore:
+                FilePlaceVisitDiagnosticLogger()
         )
     }
 
@@ -195,25 +243,32 @@ public final class PlaceVisitManager: ObservableObject {
 
     @discardableResult
     public func restore()
-        async throws -> [PlaceVisitRecord] {
+        async throws
+        -> [PlaceVisitRecord] {
 
         try await restoreIfNeeded()
 
         return activeVisits
     }
 
-    public func start() async throws {
+    public func start()
+        async throws {
 
         try await restoreIfNeeded()
 
         await monitor.start()
     }
 
-    public func refresh() async throws {
+    public func refresh()
+        async throws {
 
         try await restoreIfNeeded()
 
-        await monitor.refresh()
+        if isMonitoring {
+            await monitor.refresh()
+        } else {
+            await monitor.start()
+        }
     }
 
     public func stop() {
@@ -231,28 +286,63 @@ public final class PlaceVisitManager: ObservableObject {
     public func startBackgroundRecognition()
         async throws {
 
-        try await restoreIfNeeded()
-
-        if isBackgroundRecognitionEnabled {
-
-            try await refreshBackgroundRecognition()
-
-            return
-        }
+        await recordDiagnostic(
+            category:
+                .lifecycle,
+            name:
+                "background.start.requested"
+        )
 
         do {
 
+            try await restoreIfNeeded()
+
+            if isBackgroundRecognitionEnabled {
+
+                try await refreshBackgroundRecognition()
+
+                await recordDiagnostic(
+                    category:
+                        .lifecycle,
+                    name:
+                        "background.start.succeeded"
+                )
+
+                return
+            }
+
             try await synchronizeBackgroundMonitoring()
 
-            isBackgroundRecognitionEnabled = true
-            lastBackgroundErrorMessage = nil
+            isBackgroundRecognitionEnabled =
+                true
+
+            lastBackgroundErrorMessage =
+                nil
 
             startBackgroundEventListening()
+
+            await recordDiagnostic(
+                category:
+                    .lifecycle,
+                name:
+                    "background.start.succeeded"
+            )
 
         } catch {
 
             lastBackgroundErrorMessage =
                 error.localizedDescription
+
+            await recordDiagnostic(
+                category:
+                    .error,
+                name:
+                    "background.start.failed",
+                metadata: [
+                    "error":
+                        error.localizedDescription
+                ]
+            )
 
             throw error
         }
@@ -266,28 +356,56 @@ public final class PlaceVisitManager: ObservableObject {
     public func refreshBackgroundRecognition()
         async throws {
 
-        guard isBackgroundRecognitionEnabled else {
+        guard
+            isBackgroundRecognitionEnabled
+        else {
             return
         }
+
+        await recordDiagnostic(
+            category:
+                .lifecycle,
+            name:
+                "background.refresh.requested"
+        )
 
         do {
 
             try await synchronizeBackgroundMonitoring()
 
-            lastBackgroundErrorMessage = nil
+            lastBackgroundErrorMessage =
+                nil
+
+            await recordDiagnostic(
+                category:
+                    .lifecycle,
+                name:
+                    "background.refresh.succeeded"
+            )
 
         } catch {
 
             lastBackgroundErrorMessage =
                 error.localizedDescription
 
-            // synchronizeBackgroundMonitoring() can mark
-            // the feature disabled when a fatal condition
-            // makes background monitoring unusable.
+            await recordDiagnostic(
+                category:
+                    .error,
+                name:
+                    "background.refresh.failed",
+                metadata: [
+                    "error":
+                        error.localizedDescription
+                ]
+            )
+
             if !isBackgroundRecognitionEnabled {
 
-                backgroundEventTask?.cancel()
-                backgroundEventTask = nil
+                backgroundEventTask?
+                    .cancel()
+
+                backgroundEventTask =
+                    nil
             }
 
             throw error
@@ -301,22 +419,62 @@ public final class PlaceVisitManager: ObservableObject {
     public func stopBackgroundRecognition()
         async {
 
-        backgroundEventTask?.cancel()
-        backgroundEventTask = nil
+        await recordDiagnostic(
+            category:
+                .lifecycle,
+            name:
+                "background.stop.requested"
+        )
 
-        await backgroundMonitoringService.stop()
+        backgroundEventTask?
+            .cancel()
 
-        isBackgroundRecognitionEnabled = false
-        lastBackgroundErrorMessage = nil
+        backgroundEventTask =
+            nil
+
+        await backgroundMonitoringService
+            .stop()
+
+        isBackgroundRecognitionEnabled =
+            false
+
+        lastBackgroundErrorMessage =
+            nil
+
+        await recordDiagnostic(
+            category:
+                .lifecycle,
+            name:
+                "background.stop.succeeded"
+        )
+    }
+
+    // MARK: - Diagnostics
+
+    public func fetchDiagnosticEvents()
+        async throws
+        -> [PlaceVisitDiagnosticEvent] {
+
+        try await diagnosticStore
+            .fetchAll()
+    }
+
+    public func clearDiagnosticEvents()
+        async throws {
+
+        try await diagnosticStore
+            .clear()
     }
 
     // MARK: - Visit Queries
 
     public func fetchVisits()
-        async throws -> [PlaceVisitRecord] {
+        async throws
+        -> [PlaceVisitRecord] {
 
         let visits =
-            try await visitStore.fetchAll()
+            try await visitStore
+                .fetchAll()
 
         return sortedVisits(
             visits
@@ -325,14 +483,17 @@ public final class PlaceVisitManager: ObservableObject {
 
     public func fetchVisits(
         for placeID: UUID
-    ) async throws -> [PlaceVisitRecord] {
+    ) async throws
+        -> [PlaceVisitRecord] {
 
         let visits =
-            try await visitStore.fetchAll()
+            try await visitStore
+                .fetchAll()
 
         return sortedVisits(
             visits.filter {
-                $0.placeID == placeID
+                $0.placeID
+                    == placeID
             }
         )
     }
@@ -340,22 +501,29 @@ public final class PlaceVisitManager: ObservableObject {
     public func fetchVisits(
         from startDate: Date,
         to endDate: Date
-    ) async throws -> [PlaceVisitRecord] {
+    ) async throws
+        -> [PlaceVisitRecord] {
 
         try validateDateRange(
-            from: startDate,
-            to: endDate
+            from:
+                startDate,
+            to:
+                endDate
         )
 
         let visits =
-            try await visitStore.fetchAll()
+            try await visitStore
+                .fetchAll()
 
         return sortedVisits(
             visits.filter {
+
                 overlaps(
                     $0,
-                    startDate: startDate,
-                    endDate: endDate
+                    startDate:
+                        startDate,
+                    endDate:
+                        endDate
                 )
             }
         )
@@ -365,24 +533,31 @@ public final class PlaceVisitManager: ObservableObject {
         for placeID: UUID,
         from startDate: Date,
         to endDate: Date
-    ) async throws -> [PlaceVisitRecord] {
+    ) async throws
+        -> [PlaceVisitRecord] {
 
         try validateDateRange(
-            from: startDate,
-            to: endDate
+            from:
+                startDate,
+            to:
+                endDate
         )
 
         let visits =
-            try await visitStore.fetchAll()
+            try await visitStore
+                .fetchAll()
 
         return sortedVisits(
             visits.filter {
 
-                $0.placeID == placeID
+                $0.placeID
+                    == placeID
                     && overlaps(
                         $0,
-                        startDate: startDate,
-                        endDate: endDate
+                        startDate:
+                            startDate,
+                        endDate:
+                            endDate
                     )
             }
         )
@@ -390,14 +565,17 @@ public final class PlaceVisitManager: ObservableObject {
 
     public func fetchLatestVisit(
         for placeID: UUID
-    ) async throws -> PlaceVisitRecord? {
+    ) async throws
+        -> PlaceVisitRecord? {
 
         let visits =
-            try await visitStore.fetchAll()
+            try await visitStore
+                .fetchAll()
 
         return visits
             .filter {
-                $0.placeID == placeID
+                $0.placeID
+                    == placeID
             }
             .max { lhs, rhs in
 
@@ -414,12 +592,16 @@ public final class PlaceVisitManager: ObservableObject {
     }
 
     public func fetchEvents()
-        async throws -> [PlaceVisitEvent] {
+        async throws
+        -> [PlaceVisitEvent] {
 
         let events =
-            try await visitStore.fetchEvents()
+            try await visitStore
+                .fetchEvents()
 
-        return events.sorted { lhs, rhs in
+        return events.sorted {
+            lhs,
+            rhs in
 
             if lhs.occurredAt
                 != rhs.occurredAt {
@@ -434,32 +616,43 @@ public final class PlaceVisitManager: ObservableObject {
     }
 }
 
+// MARK: - Private
+
 private extension PlaceVisitManager {
 
     func bindMonitor() {
 
-        monitor.$recognizedPlaces
+        monitor
+            .$recognizedPlaces
             .assign(
-                to: &$recognizedPlaces
+                to:
+                    &$recognizedPlaces
             )
 
-        monitor.$isMonitoring
+        monitor
+            .$isMonitoring
             .assign(
-                to: &$isMonitoring
+                to:
+                    &$isMonitoring
             )
 
-        monitor.$lastErrorMessage
+        monitor
+            .$lastErrorMessage
             .assign(
-                to: &$lastErrorMessage
+                to:
+                    &$lastErrorMessage
             )
 
-        monitor.$lastVisitErrorMessage
+        monitor
+            .$lastVisitErrorMessage
             .assign(
-                to: &$lastVisitErrorMessage
+                to:
+                    &$lastVisitErrorMessage
             )
     }
 
-    func restoreIfNeeded() async throws {
+    func restoreIfNeeded()
+        async throws {
 
         if hasRestoredVisits {
             return
@@ -468,10 +661,14 @@ private extension PlaceVisitManager {
         if let restorationTask {
 
             let restored =
-                try await restorationTask.value
+                try await restorationTask
+                    .value
 
-            activeVisits = restored
-            hasRestoredVisits = true
+            activeVisits =
+                restored
+
+            hasRestoredVisits =
+                true
 
             return
         }
@@ -479,44 +676,61 @@ private extension PlaceVisitManager {
         let coordinator =
             self.coordinator
 
-        let task = Task {
+        let task =
+            Task {
 
-            try await coordinator.restore()
-        }
+                try await coordinator
+                    .restore()
+            }
 
-        restorationTask = task
+        restorationTask =
+            task
 
         do {
 
             let restored =
-                try await task.value
+                try await task
+                    .value
 
-            activeVisits = restored
-            hasRestoredVisits = true
-            restorationTask = nil
+            activeVisits =
+                restored
+
+            hasRestoredVisits =
+                true
+
+            restorationTask =
+                nil
 
         } catch {
 
-            restorationTask = nil
+            restorationTask =
+                nil
 
             throw error
         }
     }
 
     func processSuccessfulObservation(
-        _ places: [RecognizedPlace],
-        at timestamp: Date
+        _ places:
+            [RecognizedPlace],
+        at timestamp:
+            Date
     ) async throws {
 
-        _ = try await coordinator
-            .processSuccessfulObservation(
-                places,
-                at: timestamp
-            )
+        _ =
+            try await coordinator
+                .processSuccessfulObservation(
+                    places,
+                    at:
+                        timestamp
+                )
 
         activeVisits =
-            try await coordinator.activeVisits()
+            try await coordinator
+                .activeVisits()
     }
+
+    // MARK: - Background Synchronization
 
     func synchronizeBackgroundMonitoring()
         async throws {
@@ -525,13 +739,48 @@ private extension PlaceVisitManager {
             try await recognitionService
                 .fetchRegisteredPlacesForBackgroundMonitoring()
 
-        guard !places.isEmpty else {
+        await recordDiagnostic(
+            category:
+                .regionSync,
+            name:
+                "region.sync.registeredPlaces",
+            metadata: [
+                "count":
+                    "\(places.count)"
+            ]
+        )
+
+        guard
+            !places.isEmpty
+        else {
 
             await backgroundMonitoringService
                 .stop()
 
+            await recordDiagnostic(
+                category:
+                    .regionSync,
+                name:
+                    "region.sync.empty"
+            )
+
             return
         }
+
+        await recordDiagnostic(
+            category:
+                .authorization,
+            name:
+                "authorization.background",
+            metadata: [
+                "status":
+                    String(
+                        describing:
+                            recognitionService
+                                .locationAuthorizationStatus
+                    )
+            ]
+        )
 
         do {
 
@@ -539,13 +788,22 @@ private extension PlaceVisitManager {
 
         } catch {
 
-            // Authorization failures are terminal for
-            // background recognition. Do not leave stale
-            // system monitoring active.
+            isBackgroundRecognitionEnabled =
+                false
+
             await backgroundMonitoringService
                 .stop()
 
-            isBackgroundRecognitionEnabled = false
+            await recordDiagnostic(
+                category:
+                    .error,
+                name:
+                    "authorization.background.failed",
+                metadata: [
+                    "error":
+                        error.localizedDescription
+                ]
+            )
 
             throw error
         }
@@ -556,12 +814,32 @@ private extension PlaceVisitManager {
                     .requestBackgroundMonitoringLocation()
         else {
 
-            // A poor location snapshot is temporary.
-            // Preserve the currently registered regions
-            // and allow a later retry.
+            await recordDiagnostic(
+                category:
+                    .error,
+                name:
+                    "region.sync.locationSnapshotRejected"
+            )
+
             throw BackgroundRecognitionManagerError
                 .unacceptableLocationSnapshot
         }
+
+        await recordDiagnostic(
+            category:
+                .regionSync,
+            name:
+                "region.sync.locationSnapshot",
+            metadata: [
+                "horizontalAccuracy":
+                    String(
+                        format:
+                            "%.1f",
+                        currentLocation
+                            .horizontalAccuracy
+                    )
+            ]
+        )
 
         let prioritizedPlaceIDs =
             Set(
@@ -573,36 +851,85 @@ private extension PlaceVisitManager {
         let candidates =
             BackgroundMonitoringCandidateSelector
                 .select(
-                    from: places,
+                    from:
+                        places,
                     currentLatitude:
-                        currentLocation.latitude,
+                        currentLocation
+                            .latitude,
                     currentLongitude:
-                        currentLocation.longitude,
+                        currentLocation
+                            .longitude,
                     prioritizedPlaceIDs:
                         prioritizedPlaceIDs,
                     policy:
                         backgroundRecognitionPolicy
                 )
 
+        await recordDiagnostic(
+            category:
+                .regionSync,
+            name:
+                "region.sync.candidates",
+            metadata: [
+                "registeredCount":
+                    "\(places.count)",
+                "candidateCount":
+                    "\(candidates.count)",
+                "candidatePlaceIDs":
+                    candidates
+                        .map {
+                            $0.place.id
+                                .uuidString
+                        }
+                        .joined(
+                            separator:
+                                ","
+                        )
+            ]
+        )
+
         let requiresCandidateRefresh =
-            places.count > candidates.count
+            places.count
+                > candidates.count
 
         do {
 
             try await backgroundMonitoringService
                 .synchronize(
-                    candidates: candidates,
+                    candidates:
+                        candidates,
                     requiresCandidateRefresh:
                         requiresCandidateRefresh
                 )
 
+            await recordDiagnostic(
+                category:
+                    .regionSync,
+                name:
+                    "region.sync.succeeded",
+                metadata: [
+                    "candidateCount":
+                        "\(candidates.count)",
+                    "candidateRefresh":
+                        "\(requiresCandidateRefresh)"
+                ]
+            )
+
         } catch {
 
-            // BackgroundRegionMonitoringService already
-            // rolls back its system monitoring when this
-            // operation fails. Keep manager state aligned
-            // with that terminal failure.
-            isBackgroundRecognitionEnabled = false
+            isBackgroundRecognitionEnabled =
+                false
+
+            await recordDiagnostic(
+                category:
+                    .error,
+                name:
+                    "region.sync.failed",
+                metadata: [
+                    "error":
+                        error.localizedDescription
+                ]
+            )
 
             throw error
         }
@@ -644,136 +971,356 @@ private extension PlaceVisitManager {
         }
     }
 
+    // MARK: - Background Event Listening
+
     func startBackgroundEventListening() {
 
-        backgroundEventTask?.cancel()
+        backgroundEventTask?
+            .cancel()
 
         let events =
             backgroundMonitoringService
                 .events()
 
-        backgroundEventTask = Task {
-            [weak self] in
+        backgroundEventTask =
+            Task {
+                [weak self] in
 
-            do {
+                do {
 
-                for try await trigger in events {
+                    for try await trigger
+                        in events {
 
-                    guard !Task.isCancelled else {
-                        return
-                    }
-
-                    guard let self else {
-                        return
-                    }
-
-                    do {
-
-                        try await self
-                            .processBackgroundTrigger(
-                                trigger
-                            )
-
-                        self
-                            .lastBackgroundErrorMessage =
-                            nil
-
-                    } catch is CancellationError {
-
-                        return
-
-                    } catch {
-
-                        self
-                            .lastBackgroundErrorMessage =
-                            error.localizedDescription
-
-                        // A fatal synchronization failure
-                        // can disable monitoring from inside
-                        // processBackgroundTrigger().
-                        if !self
-                            .isBackgroundRecognitionEnabled {
-
-                            self.backgroundEventTask = nil
-
+                        guard
+                            !Task.isCancelled
+                        else {
                             return
                         }
+
+                        guard
+                            let self
+                        else {
+                            return
+                        }
+
+                        await self
+                            .recordDiagnostic(
+                                category:
+                                    .regionEvent,
+                                name:
+                                    self
+                                        .diagnosticName(
+                                            for:
+                                                trigger
+                                        ),
+                                placeID:
+                                    self
+                                        .placeID(
+                                            for:
+                                                trigger
+                                        )
+                            )
+
+                        do {
+
+                            try await self
+                                .processBackgroundTrigger(
+                                    trigger
+                                )
+
+                            self
+                                .lastBackgroundErrorMessage =
+                                nil
+
+                        } catch is CancellationError {
+
+                            return
+
+                        } catch {
+
+                            self
+                                .lastBackgroundErrorMessage =
+                                error
+                                    .localizedDescription
+
+                            await self
+                                .recordDiagnostic(
+                                    category:
+                                        .error,
+                                    name:
+                                        "background.trigger.failed",
+                                    placeID:
+                                        self
+                                            .placeID(
+                                                for:
+                                                    trigger
+                                            ),
+                                    metadata: [
+                                        "error":
+                                            error
+                                                .localizedDescription
+                                    ]
+                                )
+
+                            if !self
+                                .isBackgroundRecognitionEnabled {
+
+                                self.backgroundEventTask =
+                                    nil
+
+                                return
+                            }
+                        }
                     }
-                }
 
-                guard !Task.isCancelled,
-                      let self else {
+                    guard
+                        !Task.isCancelled,
+                        let self
+                    else {
+                        return
+                    }
+
+                    guard self
+                        .isBackgroundRecognitionEnabled
+                    else {
+
+                        self.backgroundEventTask =
+                            nil
+
+                        return
+                    }
+
+                    await self
+                        .recordDiagnostic(
+                            category:
+                                .error,
+                            name:
+                                "background.eventStream.finished"
+                        )
+
+                    self
+                        .isBackgroundRecognitionEnabled =
+                        false
+
+                    await self
+                        .backgroundMonitoringService
+                        .stop()
+
+                    self.backgroundEventTask =
+                        nil
+
+                } catch is CancellationError {
+
                     return
+
+                } catch {
+
+                    guard
+                        !Task.isCancelled,
+                        let self
+                    else {
+                        return
+                    }
+
+                    self
+                        .lastBackgroundErrorMessage =
+                        error
+                            .localizedDescription
+
+                    await self
+                        .recordDiagnostic(
+                            category:
+                                .error,
+                            name:
+                                "background.eventStream.failed",
+                            metadata: [
+                                "error":
+                                    error
+                                        .localizedDescription
+                            ]
+                        )
+
+                    await self
+                        .backgroundMonitoringService
+                        .stop()
+
+                    self
+                        .isBackgroundRecognitionEnabled =
+                        false
+
+                    self.backgroundEventTask =
+                        nil
                 }
-
-                // An unexpected normal stream termination
-                // means there is no longer an event source.
-                await self
-                    .backgroundMonitoringService
-                    .stop()
-
-                self
-                    .isBackgroundRecognitionEnabled =
-                    false
-
-                self.backgroundEventTask = nil
-
-            } catch is CancellationError {
-
-                return
-
-            } catch {
-
-                guard !Task.isCancelled,
-                      let self else {
-                    return
-                }
-
-                self.lastBackgroundErrorMessage =
-                    error.localizedDescription
-
-                // The stream itself failed. System
-                // monitoring must not remain active while
-                // the manager claims the feature is stopped.
-                await self
-                    .backgroundMonitoringService
-                    .stop()
-
-                self
-                    .isBackgroundRecognitionEnabled =
-                    false
-
-                self.backgroundEventTask = nil
             }
-        }
     }
 
     func processBackgroundTrigger(
-        _ trigger: BackgroundRecognitionTrigger
+        _ trigger:
+            BackgroundRecognitionTrigger
     ) async throws {
 
         switch trigger {
 
         case .significantLocationChange:
 
-            // Significant movement is used only to
-            // recalculate the small set of system-
-            // monitored candidate regions.
+            await recordDiagnostic(
+                category:
+                    .regionEvent,
+                name:
+                    "location.significantChange"
+            )
+
             try await synchronizeBackgroundMonitoring()
 
         case .monitoredRegionEntered,
              .monitoredRegionExited:
 
-            _ = try await backgroundEventProcessor
-                .handle(
-                    trigger
+            let triggerPlaceID =
+                placeID(
+                    for:
+                        trigger
                 )
+
+            await recordDiagnostic(
+                category:
+                    .recognition,
+                name:
+                    "recognition.started",
+                placeID:
+                    triggerPlaceID
+            )
+
+            let result =
+                try await backgroundEventProcessor
+                    .handle(
+                        trigger
+                    )
+
+            await recordDiagnostic(
+                category:
+                    .recognition,
+                name:
+                    "recognition.completed",
+                placeID:
+                    triggerPlaceID,
+                metadata: [
+                    "recognizedCount":
+                        "\(result.recognizedPlaces.count)",
+                    "recognizedPlaceIDs":
+                        result
+                            .recognizedPlaces
+                            .map {
+                                $0.place.id
+                                    .uuidString
+                            }
+                            .joined(
+                                separator:
+                                    ","
+                            )
+                ]
+            )
+
+            await recordDiagnostic(
+                category:
+                    .visit,
+                name:
+                    "visit.update",
+                placeID:
+                    triggerPlaceID,
+                metadata: [
+                    "events":
+                        "\(result.visitUpdate.events.count)",
+                    "startedVisits":
+                        "\(result.visitUpdate.startedVisits.count)",
+                    "endedVisits":
+                        "\(result.visitUpdate.endedVisits.count)"
+                ]
+            )
 
             activeVisits =
                 try await coordinator
                     .activeVisits()
         }
     }
+
+    // MARK: - Diagnostics
+
+    func recordDiagnostic(
+        category:
+            PlaceVisitDiagnosticCategory,
+        name: String,
+        placeID: UUID? = nil,
+        metadata:
+            [String: String] = [:]
+    ) async {
+
+        do {
+
+            try await diagnosticStore
+                .append(
+                    PlaceVisitDiagnosticEvent(
+                        category:
+                            category,
+                        name:
+                            name,
+                        placeID:
+                            placeID,
+                        metadata:
+                            metadata
+                    )
+                )
+
+        } catch {
+
+            // Diagnostic persistence must never break
+            // recognition or visit processing.
+        }
+    }
+
+    func diagnosticName(
+        for trigger:
+            BackgroundRecognitionTrigger
+    ) -> String {
+
+        switch trigger {
+
+        case .monitoredRegionEntered:
+
+            return "region.entered"
+
+        case .monitoredRegionExited:
+
+            return "region.exited"
+
+        case .significantLocationChange:
+
+            return "location.significantChange"
+        }
+    }
+
+    func placeID(
+        for trigger:
+            BackgroundRecognitionTrigger
+    ) -> UUID? {
+
+        switch trigger {
+
+        case .monitoredRegionEntered(
+            let placeID
+        ),
+        .monitoredRegionExited(
+            let placeID
+        ):
+
+            return placeID
+
+        case .significantLocationChange:
+
+            return nil
+        }
+    }
+
+    // MARK: - Queries
 
     func validateDateRange(
         from startDate: Date,
@@ -787,7 +1334,8 @@ private extension PlaceVisitManager {
             endDate
                 .timeIntervalSince1970
                 .isFinite,
-            startDate <= endDate
+            startDate
+                <= endDate
         else {
 
             throw PlaceVisitQueryError
@@ -796,13 +1344,17 @@ private extension PlaceVisitManager {
     }
 
     func overlaps(
-        _ visit: PlaceVisitRecord,
-        startDate: Date,
-        endDate: Date
+        _ visit:
+            PlaceVisitRecord,
+        startDate:
+            Date,
+        endDate:
+            Date
     ) -> Bool {
 
         guard
-            visit.startedAt <= endDate
+            visit.startedAt
+                <= endDate
         else {
             return false
         }
@@ -815,14 +1367,18 @@ private extension PlaceVisitManager {
             return true
         }
 
-        return visitEnd >= startDate
+        return visitEnd
+            >= startDate
     }
 
     func sortedVisits(
-        _ visits: [PlaceVisitRecord]
+        _ visits:
+            [PlaceVisitRecord]
     ) -> [PlaceVisitRecord] {
 
-        visits.sorted { lhs, rhs in
+        visits.sorted {
+            lhs,
+            rhs in
 
             if lhs.startedAt
                 != rhs.startedAt {

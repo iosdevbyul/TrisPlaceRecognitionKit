@@ -112,10 +112,10 @@ struct DemoVisitHistoryView: View {
         }
         .onChange(
             of: scenePhase
-        ) { phase in
+        ) { _, newPhase in
 
             guard
-                phase == .active
+                newPhase == .active
             else {
                 return
             }
@@ -128,8 +128,7 @@ struct DemoVisitHistoryView: View {
     }
 }
 
-private extension
-    DemoVisitHistoryView {
+private extension DemoVisitHistoryView {
 
     var emptyView:
         some View {
@@ -309,14 +308,6 @@ private extension
                                 )
                         )
                 )
-
-            } else {
-
-                detailRow(
-                    title: "퇴장",
-                    value:
-                        "현재 방문 중"
-                )
             }
 
             detailRow(
@@ -374,12 +365,16 @@ private extension
             return
         }
 
-        isLoading = true
-        errorMessage = nil
+        isLoading =
+            true
+
+        errorMessage =
+            nil
 
         defer {
 
-            isLoading = false
+            isLoading =
+                false
         }
 
         do {
@@ -490,15 +485,19 @@ private extension
         switch evidence {
 
         case .bssid:
+
             return "Wi-Fi BSSID"
 
         case .ssid:
+
             return "Wi-Fi SSID"
 
         case .gpsOnlyWiFiUnavailable:
+
             return "GPS · Wi-Fi 확인 불가"
 
         case .gpsOnlyNoWiFiConfigured:
+
             return "GPS"
         }
     }
