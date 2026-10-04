@@ -12,87 +12,158 @@ import TrisLocationKit
 public struct PlaceManagementView: View {
 
     @State
-    private var activeSheet: ActiveSheet?
+    private var activeSheet:
+        ActiveSheet?
 
     @State
-    private var refreshToken = UUID()
+    private var refreshToken =
+        UUID()
 
-    private let placeStore: any PlaceStoring
+    private let placeStore:
+        any PlaceStoring
 
-    private let registrationService: PlaceRegistrationService
+    private let visitManager:
+        PlaceVisitManager?
 
-    private let duplicateCheckService: PlaceDuplicateCheckService
+    private let registrationService:
+        PlaceRegistrationService
 
-    private let managementService: PlaceManagementService
+    private let duplicateCheckService:
+        PlaceDuplicateCheckService
 
-    private let networkManagementService: PlaceNetworkManagementService
+    private let managementService:
+        PlaceManagementService
+
+    private let networkManagementService:
+        PlaceNetworkManagementService
 
     public init(
-        placeStore: any PlaceStoring,
-        locationProvider: any LocationProviding,
-        wifiProvider: any WiFiProviding
+        placeStore:
+            any PlaceStoring,
+        locationProvider:
+            any LocationProviding,
+        wifiProvider:
+            any WiFiProviding,
+        visitManager:
+            PlaceVisitManager? = nil
     ) {
-        self.placeStore = placeStore
 
-        self.registrationService = PlaceRegistrationService(
-            locationProvider: locationProvider,
-            wifiProvider: wifiProvider,
-            placeStore: placeStore
-        )
+        self.placeStore =
+            placeStore
 
-        self.duplicateCheckService = PlaceDuplicateCheckService(
-            placeStore: placeStore
-        )
+        self.visitManager =
+            visitManager
 
-        self.managementService = PlaceManagementService(
-            placeStore: placeStore,
-            locationProvider: locationProvider
-        )
+        self.registrationService =
+            PlaceRegistrationService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        self.duplicateCheckService =
+            PlaceDuplicateCheckService(
+                placeStore:
+                    placeStore
+            )
+
+        self.managementService =
+            PlaceManagementService(
+                placeStore:
+                    placeStore,
+                locationProvider:
+                    locationProvider
+            )
 
         self.networkManagementService =
             PlaceNetworkManagementService(
-                placeStore: placeStore,
-                wifiProvider: wifiProvider
+                placeStore:
+                    placeStore,
+                wifiProvider:
+                    wifiProvider
             )
     }
 
-    public var body: some View {
+    public var body:
+        some View {
+
         NavigationView {
-            PlaceListView(
-                placeStore: placeStore,
-                refreshToken: refreshToken
-            ) { place in
-                activeSheet = .detail(place)
-            }
-            .navigationTitle("장소")
-            .toolbar {
-                ToolbarItem(
-                    placement: .navigationBarTrailing
-                ) {
-                    Button {
-                        activeSheet = .registration
-                    } label: {
-                        Label(
-                            "장소 추가",
-                            systemImage: "plus"
+
+            if let visitManager {
+
+                PlaceManagementObservedContent(
+                    placeStore:
+                        placeStore,
+                    visitManager:
+                        visitManager,
+                    refreshToken:
+                        refreshToken
+                ) { place in
+
+                    activeSheet =
+                        .detail(
+                            place
                         )
-                    }
+                }
+                .navigationTitle(
+                    "장소"
+                )
+                .toolbar {
+                    addPlaceToolbar
+                }
+
+            } else {
+
+                PlaceListView(
+                    placeStore:
+                        placeStore,
+                    refreshToken:
+                        refreshToken
+                ) { place in
+
+                    activeSheet =
+                        .detail(
+                            place
+                        )
+                }
+                .navigationTitle(
+                    "장소"
+                )
+                .toolbar {
+                    addPlaceToolbar
                 }
             }
         }
-        .navigationViewStyle(.stack)
+        .navigationViewStyle(
+            .stack
+        )
         .sheet(
-            item: $activeSheet,
+            item:
+                $activeSheet,
             onDismiss: {
-                refreshToken = UUID()
+
+                refreshToken =
+                    UUID()
             }
         ) { sheet in
+
             switch sheet {
+
             case .registration:
+
                 registrationSheet
 
-            case .detail(let place):
-                detailSheet(for: place)
+            case .detail(
+                let place
+            ):
+
+                detailSheet(
+                    for:
+                        place
+                )
             }
         }
     }
@@ -100,54 +171,209 @@ public struct PlaceManagementView: View {
 
 private extension PlaceManagementView {
 
-    enum ActiveSheet: Identifiable {
-        case registration
-        case detail(RegisteredPlace)
+    enum ActiveSheet:
+        Identifiable {
 
-        var id: String {
+        case registration
+        case detail(
+            RegisteredPlace
+        )
+
+        var id:
+            String {
+
             switch self {
+
             case .registration:
+
                 return "registration"
 
-            case .detail(let place):
+            case .detail(
+                let place
+            ):
+
                 return "detail-\(place.id.uuidString)"
             }
         }
     }
 
-    var registrationSheet: some View {
-        NavigationView {
-            PlaceRegistrationView(
-                registrationService: registrationService,
-                duplicateCheckService: duplicateCheckService
-            ) { _ in
-                refreshToken = UUID()
-                activeSheet = nil
+    @ToolbarContentBuilder
+    var addPlaceToolbar:
+        some ToolbarContent {
+
+        ToolbarItem(
+            placement:
+                .navigationBarTrailing
+        ) {
+
+            Button {
+
+                activeSheet =
+                    .registration
+
+            } label: {
+
+                Label(
+                    "장소 추가",
+                    systemImage:
+                        "plus"
+                )
             }
-            .navigationTitle("장소 등록")
-            .navigationBarTitleDisplayMode(.inline)
         }
-        .navigationViewStyle(.stack)
+    }
+
+    var registrationSheet:
+        some View {
+
+        NavigationView {
+
+            PlaceRegistrationView(
+                registrationService:
+                    registrationService,
+                duplicateCheckService:
+                    duplicateCheckService
+            ) { _ in
+
+                refreshToken =
+                    UUID()
+
+                refreshBackgroundRecognitionAfterPlaceMutation()
+
+                activeSheet =
+                    nil
+            }
+            .navigationTitle(
+                "장소 등록"
+            )
+            .navigationBarTitleDisplayMode(
+                .inline
+            )
+        }
+        .navigationViewStyle(
+            .stack
+        )
     }
 
     func detailSheet(
-        for place: RegisteredPlace
+        for place:
+            RegisteredPlace
     ) -> some View {
+
         NavigationView {
+
             PlaceDetailView(
-                place: place,
-                managementService: managementService,
-                networkManagementService: networkManagementService,
-                duplicateCheckService: duplicateCheckService,
+                place:
+                    place,
+                managementService:
+                    managementService,
+                networkManagementService:
+                    networkManagementService,
+                duplicateCheckService:
+                    duplicateCheckService,
                 onChanged: { _ in
-                    refreshToken = UUID()
+
+                    refreshToken =
+                        UUID()
+
+                    refreshBackgroundRecognitionAfterPlaceMutation()
                 },
                 onDeleted: { _ in
-                    refreshToken = UUID()
-                    activeSheet = nil
+
+                    refreshToken =
+                        UUID()
+
+                    refreshBackgroundRecognitionAfterPlaceMutation()
+
+                    activeSheet =
+                        nil
                 }
             )
         }
-        .navigationViewStyle(.stack)
+        .navigationViewStyle(
+            .stack
+        )
+    }
+
+    func refreshBackgroundRecognitionAfterPlaceMutation() {
+
+        guard let visitManager
+        else {
+            return
+        }
+
+        Task {
+
+            try? await visitManager
+                .refreshBackgroundRecognition()
+
+            try? await visitManager
+                .refresh()
+        }
+    }
+}
+
+@MainActor
+private struct PlaceManagementObservedContent:
+    View {
+
+    private let placeStore:
+        any PlaceStoring
+
+    @ObservedObject
+    private var visitManager:
+        PlaceVisitManager
+
+    private let refreshToken:
+        UUID
+
+    private let onSelect:
+        @MainActor (
+            RegisteredPlace
+        ) -> Void
+
+    init(
+        placeStore:
+            any PlaceStoring,
+        visitManager:
+            PlaceVisitManager,
+        refreshToken:
+            UUID,
+        onSelect:
+            @escaping @MainActor (
+                RegisteredPlace
+            ) -> Void
+    ) {
+
+        self.placeStore =
+            placeStore
+
+        _visitManager =
+            ObservedObject(
+                wrappedValue:
+                    visitManager
+            )
+
+        self.refreshToken =
+            refreshToken
+
+        self.onSelect =
+            onSelect
+    }
+
+    var body:
+        some View {
+
+        PlaceListView(
+            placeStore:
+                placeStore,
+            refreshToken:
+                refreshToken,
+            activeVisits:
+                visitManager.activeVisits,
+            recognizedPlaces:
+                visitManager.recognizedPlaces,
+            onSelect:
+                onSelect
+        )
     }
 }

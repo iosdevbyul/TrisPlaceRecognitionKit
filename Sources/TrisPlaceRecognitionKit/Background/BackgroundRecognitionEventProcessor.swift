@@ -7,6 +7,33 @@
 
 import Foundation
 
+struct BackgroundRecognitionProcessingResult {
+
+    let recognizedPlaces:
+        [RecognizedPlace]
+
+    let visitUpdate:
+        PlaceVisitUpdate
+
+    var events:
+        [PlaceVisitEvent] {
+
+        visitUpdate.events
+    }
+
+    var startedVisits:
+        [PlaceVisitRecord] {
+
+        visitUpdate.startedVisits
+    }
+
+    var endedVisits:
+        [PlaceVisitRecord] {
+
+        visitUpdate.endedVisits
+    }
+}
+
 @MainActor
 final class BackgroundRecognitionEventProcessor {
 
@@ -37,11 +64,13 @@ final class BackgroundRecognitionEventProcessor {
             recognitionPolicy
     }
 
-    @discardableResult
     func handle(
-        _ trigger: BackgroundRecognitionTrigger,
-        at timestamp: Date = Date()
-    ) async throws -> PlaceVisitUpdate {
+        _ trigger:
+            BackgroundRecognitionTrigger,
+        at timestamp:
+            Date = Date()
+    ) async throws
+        -> BackgroundRecognitionProcessingResult {
 
         try Task.checkCancellation()
 
@@ -49,10 +78,12 @@ final class BackgroundRecognitionEventProcessor {
 
         case .significantLocationChange:
 
-            // Significant movement is not visit evidence.
-            // It will later be used only to refresh the
-            // set of monitored place candidates.
-            return PlaceVisitUpdate()
+            return BackgroundRecognitionProcessingResult(
+                recognizedPlaces:
+                    [],
+                visitUpdate:
+                    PlaceVisitUpdate()
+            )
 
         case .monitoredRegionEntered,
              .monitoredRegionExited:
@@ -60,26 +91,30 @@ final class BackgroundRecognitionEventProcessor {
             break
         }
 
-        // One real recognition request is performed only
-        // because a relevant system event occurred.
-        //
-        // This never starts continuous location updates.
         let recognizedPlaces =
             try await recognitionService
                 .recognizeCurrentPlaces(
-                    policy: recognitionPolicy
+                    policy:
+                        recognitionPolicy
                 )
 
         try Task.checkCancellation()
 
-        // A recognition error never reaches this point,
-        // so failure can never be interpreted as an empty
-        // successful observation.
-        return try await coordinator
-            .processVerifiedBackgroundObservation(
+        let update =
+            try await coordinator
+                .processVerifiedBackgroundObservation(
+                    recognizedPlaces,
+                    trigger:
+                        trigger,
+                    at:
+                        timestamp
+                )
+
+        return BackgroundRecognitionProcessingResult(
+            recognizedPlaces:
                 recognizedPlaces,
-                trigger: trigger,
-                at: timestamp
-            )
+            visitUpdate:
+                update
+        )
     }
 }

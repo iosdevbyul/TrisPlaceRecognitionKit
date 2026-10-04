@@ -22,16 +22,10 @@ final class DemoAppDelegate:
                 [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
 
-        let wasLaunchedForLocationEvent =
-            launchOptions?[.location] != nil
-
         Task {
 
             await environment
-                .handleApplicationLaunch(
-                    wasLaunchedForLocationEvent:
-                        wasLaunchedForLocationEvent
-                )
+                .handleApplicationLaunch()
         }
 
         return true

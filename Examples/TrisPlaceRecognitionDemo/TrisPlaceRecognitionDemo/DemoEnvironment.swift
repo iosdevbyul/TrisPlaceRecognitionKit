@@ -36,11 +36,6 @@ final class DemoEnvironment:
     private(set)
     var statusMessage: String?
 
-    @Published
-    private(set)
-    var wasLaunchedForLocationEvent =
-        false
-
     let locationProvider =
         CoreLocationProvider()
 
@@ -62,6 +57,15 @@ final class DemoEnvironment:
         backgroundRecognitionPreferenceKey =
             "TrisPlaceRecognitionDemo.backgroundRecognitionEnabled"
 
+    private var preparationTask:
+        Task<
+            (
+                any PlaceStoring,
+                PlaceVisitManager
+            ),
+            Error
+        >?
+
     var wantsBackgroundRecognition:
         Bool {
 
@@ -82,13 +86,8 @@ final class DemoEnvironment:
 
     // MARK: - App Launch
 
-    func handleApplicationLaunch(
-        wasLaunchedForLocationEvent: Bool
-    ) async {
-
-        self
-            .wasLaunchedForLocationEvent =
-            wasLaunchedForLocationEvent
+    func handleApplicationLaunch()
+        async {
 
         guard
             wantsBackgroundRecognition
@@ -116,9 +115,7 @@ final class DemoEnvironment:
                 .startBackgroundRecognition()
 
             statusMessage =
-                wasLaunchedForLocationEvent
-                ? "Background recognition resumed after a location launch."
-                : "Background recognition resumed."
+                "Background recognition resumed."
 
             errorMessage =
                 nil
@@ -290,33 +287,87 @@ final class DemoEnvironment:
             return
         }
 
-        let placeStore =
-            try await PlaceStoreFactory
-                .makeDefaultStore()
+        if let preparationTask {
 
-        let recognitionService =
-            PlaceRecognitionService(
-                locationProvider:
-                    locationProvider,
-                wifiProvider:
-                    wifiProvider,
-                placeStore:
-                    placeStore
-            )
+            let result =
+                try await preparationTask.value
 
-        let manager =
-            try PlaceVisitManager(
-                recognitionService:
-                    recognitionService,
-                recognitionPolicy:
-                    .wifiFirst
-            )
+            store =
+                result.0
 
-        store =
-            placeStore
+            visitManager =
+                result.1
 
-        visitManager =
-            manager
+            return
+        }
+
+        let locationProvider =
+            self.locationProvider
+
+        let wifiProvider =
+            self.wifiProvider
+
+        let task =
+            Task<
+                (
+                    any PlaceStoring,
+                    PlaceVisitManager
+                ),
+                Error
+            > {
+
+                let placeStore =
+                    try await PlaceStoreFactory
+                        .makeDefaultStore()
+
+                let recognitionService =
+                    PlaceRecognitionService(
+                        locationProvider:
+                            locationProvider,
+                        wifiProvider:
+                            wifiProvider,
+                        placeStore:
+                            placeStore
+                    )
+
+                let manager =
+                    try PlaceVisitManager(
+                        recognitionService:
+                            recognitionService,
+                        recognitionPolicy:
+                            .wifiFirst
+                    )
+
+                return (
+                    placeStore,
+                    manager
+                )
+            }
+
+        preparationTask =
+            task
+
+        do {
+
+            let result =
+                try await task.value
+
+            store =
+                result.0
+
+            visitManager =
+                result.1
+
+            preparationTask =
+                nil
+
+        } catch {
+
+            preparationTask =
+                nil
+
+            throw error
+        }
     }
 
     private func
