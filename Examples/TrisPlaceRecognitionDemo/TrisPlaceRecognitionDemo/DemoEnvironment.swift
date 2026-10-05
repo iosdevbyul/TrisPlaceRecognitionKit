@@ -335,7 +335,9 @@ final class DemoEnvironment:
                         recognitionService:
                             recognitionService,
                         recognitionPolicy:
-                            .wifiFirst
+                            .wifiFirst,
+                        placeVisitNotificationsEnabled:
+                            true
                     )
 
                 return (

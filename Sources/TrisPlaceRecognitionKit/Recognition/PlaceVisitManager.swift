@@ -64,6 +64,9 @@ public final class PlaceVisitManager: ObservableObject {
     private let diagnosticStore:
         any PlaceVisitDiagnosticStoring
 
+    private let visitNotifier:
+        any PlaceVisitNotifying
+
     private var backgroundEventTask:
         Task<Void, Never>?
 
@@ -86,8 +89,23 @@ public final class PlaceVisitManager: ObservableObject {
         refreshInterval:
             TimeInterval = 15,
         backgroundRecognitionPolicy:
-            BackgroundRecognitionPolicy = .init()
+            BackgroundRecognitionPolicy = .init(),
+        placeVisitNotificationsEnabled:
+            Bool = false
     ) {
+        let visitNotifier:
+            any PlaceVisitNotifying
+
+        if placeVisitNotificationsEnabled {
+
+            visitNotifier =
+                UserNotificationPlaceVisitNotifier()
+
+        } else {
+
+            visitNotifier =
+                NoOpPlaceVisitNotifier()
+        }
 
         self.init(
             recognitionService:
@@ -105,7 +123,9 @@ public final class PlaceVisitManager: ObservableObject {
             backgroundMonitor:
                 CoreLocationBackgroundRegionMonitor(),
             diagnosticStore:
-                FilePlaceVisitDiagnosticLogger()
+                FilePlaceVisitDiagnosticLogger(),
+            visitNotifier:
+                visitNotifier
         )
     }
 
@@ -121,7 +141,10 @@ public final class PlaceVisitManager: ObservableObject {
             any BackgroundRegionMonitoring,
         diagnosticStore:
             any PlaceVisitDiagnosticStoring =
-                NoOpPlaceVisitDiagnosticStore()
+                NoOpPlaceVisitDiagnosticStore(),
+        visitNotifier:
+            any PlaceVisitNotifying =
+                NoOpPlaceVisitNotifier()
     ) {
 
         let diagnosticVisitStore =
@@ -184,6 +207,9 @@ public final class PlaceVisitManager: ObservableObject {
         self.diagnosticStore =
             diagnosticStore
 
+        self.visitNotifier =
+            visitNotifier
+
         bindMonitor()
 
         monitor.onSuccessfulRecognition = {
@@ -213,8 +239,23 @@ public final class PlaceVisitManager: ObservableObject {
         refreshInterval:
             TimeInterval = 15,
         backgroundRecognitionPolicy:
-            BackgroundRecognitionPolicy = .init()
+            BackgroundRecognitionPolicy = .init(),
+        placeVisitNotificationsEnabled:
+            Bool = false
     ) throws {
+        let visitNotifier:
+            any PlaceVisitNotifying
+
+        if placeVisitNotificationsEnabled {
+
+            visitNotifier =
+                UserNotificationPlaceVisitNotifier()
+
+        } else {
+
+            visitNotifier =
+                NoOpPlaceVisitNotifier()
+        }
 
         let visitStore =
             try SwiftDataPlaceVisitStore()
@@ -235,7 +276,8 @@ public final class PlaceVisitManager: ObservableObject {
             backgroundMonitor:
                 CoreLocationBackgroundRegionMonitor(),
             diagnosticStore:
-                FilePlaceVisitDiagnosticLogger()
+                FilePlaceVisitDiagnosticLogger(),
+            visitNotifier: visitNotifier
         )
     }
 
@@ -717,7 +759,7 @@ private extension PlaceVisitManager {
             Date
     ) async throws {
 
-        _ =
+        let update =
             try await coordinator
                 .processSuccessfulObservation(
                     places,
@@ -728,6 +770,10 @@ private extension PlaceVisitManager {
         activeVisits =
             try await coordinator
                 .activeVisits()
+
+        await notifyVisitEvents(
+            update.events
+        )
     }
 
     // MARK: - Background Synchronization
@@ -1260,10 +1306,14 @@ private extension PlaceVisitManager {
                 activeVisits =
                     try await coordinator
                         .activeVisits()
+
+                await notifyVisitEvents(
+                    result.visitUpdate.events
+                )
             }
 
             try await synchronizeBackgroundMonitoring()
-            
+
         case .monitoredRegionEntered,
              .monitoredRegionExited:
 
@@ -1332,6 +1382,10 @@ private extension PlaceVisitManager {
             activeVisits =
                 try await coordinator
                     .activeVisits()
+
+            await notifyVisitEvents(
+                result.visitUpdate.events
+            )
         }
     }
 
@@ -1481,6 +1535,98 @@ private extension PlaceVisitManager {
 
             return lhs.id.uuidString
                 < rhs.id.uuidString
+        }
+    }
+
+    func notifyVisitEvents(
+        _ events:
+            [PlaceVisitEvent]
+    ) async {
+
+        guard !events.isEmpty else {
+            return
+        }
+
+        do {
+
+            let registeredPlaces =
+                try await recognitionService
+                    .fetchRegisteredPlacesForBackgroundMonitoring()
+
+            let placeNamesByID =
+                Dictionary(
+                    uniqueKeysWithValues:
+                        registeredPlaces.map {
+                            (
+                                $0.id,
+                                $0.name.value
+                            )
+                        }
+                )
+
+            for event in events {
+
+                guard
+                    let placeName =
+                        placeNamesByID[
+                            event.placeID
+                        ]
+                else {
+                    continue
+                }
+
+                do {
+
+                    switch event.kind {
+
+                    case .arrived:
+
+                        try await visitNotifier
+                            .notifyArrival(
+                                placeName:
+                                    placeName
+                            )
+
+                    case .departed:
+
+                        try await visitNotifier
+                            .notifyDeparture(
+                                placeName:
+                                    placeName
+                            )
+                    }
+
+                } catch {
+
+                    await recordDiagnostic(
+                        category:
+                            .error,
+                        name:
+                            "notification.visit.failed",
+                        placeID:
+                            event.placeID,
+                        metadata: [
+                            "kind":
+                                event.kind.rawValue,
+                            "error":
+                                error.localizedDescription
+                        ]
+                    )
+                }
+            }
+
+        } catch {
+
+            await recordDiagnostic(
+                category:
+                    .error,
+                name:
+                    "notification.placeLookup.failed",
+                metadata: [
+                    "error":
+                        error.localizedDescription
+                ]
+            )
         }
     }
 }
