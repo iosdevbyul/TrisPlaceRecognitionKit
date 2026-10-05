@@ -10,6 +10,7 @@ import SwiftUI
 import TrisLocationKit
 import TrisPlaceRecognitionKit
 import UIKit
+import UserNotifications
 
 @MainActor
 struct DemoBackgroundValidationView: View {
@@ -63,7 +64,12 @@ struct DemoBackgroundValidationView: View {
     @State
     private var exportedDiagnosticLog:
         ExportedDiagnosticLog?
-    
+
+    @State
+    private var notificationAuthorizationStatus:
+        UNAuthorizationStatus =
+            .notDetermined
+
     init(
         environment:
             DemoEnvironment,
@@ -94,6 +100,8 @@ struct DemoBackgroundValidationView: View {
 
                 authorizationSection
 
+                notificationSection
+
                 backgroundRecognitionSection
 
                 systemMonitoringSection
@@ -109,7 +117,7 @@ struct DemoBackgroundValidationView: View {
                 controlSection
 
                 validationGuideSection
-                
+
             }
             .navigationTitle(
                 "실기기 검증"
@@ -188,6 +196,40 @@ struct DemoBackgroundValidationView: View {
 
 private extension DemoBackgroundValidationView {
 
+    var notificationSection:
+        some View {
+
+        Section(
+            "알림"
+        ) {
+
+            statusRow(
+                title:
+                    "알림 권한",
+                value:
+                    notificationAuthorizationText
+            )
+
+            Button(
+                "알림 권한 요청"
+            ) {
+
+                Task {
+
+                    await requestNotificationAuthorization()
+                }
+            }
+            .disabled(
+                notificationAuthorizationStatus
+                    == .authorized
+                    || notificationAuthorizationStatus
+                        == .provisional
+                    || notificationAuthorizationStatus
+                        == .ephemeral
+            )
+        }
+    }
+
     var authorizationSection:
         some View {
 
@@ -201,7 +243,7 @@ private extension DemoBackgroundValidationView {
                 value:
                     authorizationText
             )
-            
+
             statusRow(
                 title:
                     "Foreground Monitoring",
@@ -646,7 +688,7 @@ private extension DemoBackgroundValidationView {
                 diagnosticEvents
                     .isEmpty
             )
-            
+
             Button(
                 "전체 진단 로그 내보내기"
             ) {
@@ -787,6 +829,45 @@ private extension DemoBackgroundValidationView {
 
 private extension DemoBackgroundValidationView {
 
+    func requestNotificationAuthorization()
+        async {
+
+        localErrorMessage =
+            nil
+
+        do {
+
+            _ =
+                try await UNUserNotificationCenter
+                    .current()
+                    .requestAuthorization(
+                        options: [
+                            .alert,
+                            .sound
+                        ]
+                    )
+
+            await refreshNotificationAuthorizationStatus()
+
+        } catch {
+
+            localErrorMessage =
+                error.localizedDescription
+        }
+    }
+
+    func refreshNotificationAuthorizationStatus()
+        async {
+
+        let settings =
+            await UNUserNotificationCenter
+                .current()
+                .notificationSettings()
+
+        notificationAuthorizationStatus =
+            settings.authorizationStatus
+    }
+
     func exportDiagnosticLog()
         async {
 
@@ -890,29 +971,31 @@ private extension DemoBackgroundValidationView {
                 error.localizedDescription
         }
     }
-    
+
     func refreshSnapshot()
         async {
 
-        guard
-            !isRefreshing
-        else {
-            return
-        }
-
-        isRefreshing =
-            true
-
-        localErrorMessage =
-            nil
-
-        defer {
+            guard
+                !isRefreshing
+            else {
+                return
+            }
 
             isRefreshing =
-                false
-        }
+                true
 
-        do {
+            localErrorMessage =
+                nil
+
+            defer {
+
+                isRefreshing =
+                    false
+            }
+
+            await refreshNotificationAuthorizationStatus()
+
+            do {
 
             places =
                 try await placeStore
@@ -1024,6 +1107,37 @@ private extension DemoBackgroundValidationView {
 // MARK: - Presentation
 
 private extension DemoBackgroundValidationView {
+
+    var notificationAuthorizationText:
+        String {
+
+        switch notificationAuthorizationStatus {
+
+        case .notDetermined:
+
+            return "미결정"
+
+        case .denied:
+
+            return "거부됨"
+
+        case .authorized:
+
+            return "허용됨"
+
+        case .provisional:
+
+            return "임시 허용"
+
+        case .ephemeral:
+
+            return "일시적 허용"
+
+        @unknown default:
+
+            return "알 수 없음"
+        }
+    }
 
     static func placeID(
         from identifier:
@@ -1331,7 +1445,7 @@ private extension DemoBackgroundValidationView {
         return
             "\(totalMinutes)분"
     }
-    
+
     private struct ExportedDiagnosticLog:
         Identifiable {
 

@@ -120,7 +120,7 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
-    
+
     @Test
     func backgroundStartSucceedsWhenLocationSnapshotFailsButAllPlacesFit()
         async throws {
@@ -566,6 +566,553 @@ struct PlaceVisitManagerBackgroundTests {
     }
 
     @Test
+    func backgroundArrivalNotifiesAfterVisitIsPersisted()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider(
+                network:
+                    WiFiNetwork(
+                        ssid:
+                            "GYM_WIFI",
+                        bssid:
+                            nil
+                    )
+            )
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let notifier =
+            MockPlaceVisitNotifier()
+
+        let gym =
+            try makePlace(
+                name:
+                    "Gym",
+                latitude:
+                    37.5665,
+                ssid:
+                    "GYM_WIFI"
+            )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .wifiFirst,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    .init(),
+                backgroundMonitor:
+                    backgroundMonitor,
+                visitNotifier:
+                    notifier
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        backgroundMonitor.emit(
+            .monitoredRegionEntered(
+                placeID:
+                    gym.id
+            )
+        )
+
+        await waitUntil {
+            manager.activeVisits.count
+                == 1
+        }
+
+        for _ in 0..<100 {
+
+            let names =
+                await notifier
+                    .arrivalPlaceNames
+
+            if names == [
+                "Gym"
+            ] {
+                break
+            }
+
+            try? await Task.sleep(
+                nanoseconds:
+                    1_000_000
+            )
+        }
+
+        let events =
+            try await visitStore
+                .fetchEvents()
+
+        #expect(
+            events.count
+                == 1
+        )
+
+        #expect(
+            events.first?.kind
+                == .arrived
+        )
+
+        let arrivalPlaceNames =
+            await notifier
+                .arrivalPlaceNames
+
+        let departurePlaceNames =
+            await notifier
+                .departurePlaceNames
+
+        #expect(
+            arrivalPlaceNames
+                == [
+                    "Gym"
+                ]
+        )
+
+        #expect(
+            departurePlaceNames
+                .isEmpty
+        )
+
+        await manager
+            .stopBackgroundRecognition()
+    }
+
+    @Test
+    func backgroundDepartureNotifiesAfterVisitIsPersisted()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider(
+                network:
+                    nil
+            )
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let notifier =
+            MockPlaceVisitNotifier()
+
+        let home =
+            try makePlace(
+                name:
+                    "Home",
+                latitude:
+                    37.5665,
+                ssid:
+                    "HOME_WIFI"
+            )
+
+        try await placeStore.save(
+            home
+        )
+
+        _ =
+            try await seedActiveVisit(
+                place:
+                    home,
+                store:
+                    visitStore
+            )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .wifiFirst,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    .init(),
+                backgroundMonitor:
+                    backgroundMonitor,
+                visitNotifier:
+                    notifier
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        backgroundMonitor.emit(
+            .monitoredRegionExited(
+                placeID:
+                    home.id
+            )
+        )
+
+        await waitUntil {
+            manager.activeVisits
+                .isEmpty
+        }
+
+        for _ in 0..<100 {
+
+            let names =
+                await notifier
+                    .departurePlaceNames
+
+            if names == [
+                "Home"
+            ] {
+                break
+            }
+
+            try? await Task.sleep(
+                nanoseconds:
+                    1_000_000
+            )
+        }
+
+        let events =
+            try await visitStore
+                .fetchEvents()
+
+        #expect(
+            events.filter {
+                $0.kind == .departed
+            }.count
+                == 1
+        )
+
+        let arrivalPlaceNames =
+            await notifier
+                .arrivalPlaceNames
+
+        let departurePlaceNames =
+            await notifier
+                .departurePlaceNames
+
+        #expect(
+            arrivalPlaceNames
+                .isEmpty
+        )
+
+        #expect(
+            departurePlaceNames
+                == [
+                    "Home"
+                ]
+        )
+
+        await manager
+            .stopBackgroundRecognition()
+    }
+
+    @Test
+    func backgroundTravelGapNotifiesHomeDepartureThenGymArrival()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider(
+                network:
+                    nil
+            )
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let notifier =
+            MockPlaceVisitNotifier()
+
+        let home =
+            try makePlace(
+                name:
+                    "Home",
+                latitude:
+                    37.5665,
+                ssid:
+                    "HOME_WIFI"
+            )
+
+        let gym =
+            try makePlace(
+                name:
+                    "Gym",
+                latitude:
+                    37.5700,
+                ssid:
+                    "GYM_WIFI"
+            )
+
+        try await placeStore.save(
+            home
+        )
+
+        try await placeStore.save(
+            gym
+        )
+
+        _ =
+            try await seedActiveVisit(
+                place:
+                    home,
+                store:
+                    visitStore
+            )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .wifiFirst,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    .init(),
+                backgroundMonitor:
+                    backgroundMonitor,
+                visitNotifier:
+                    notifier
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        // 1. Leave Home.
+        backgroundMonitor.emit(
+            .monitoredRegionExited(
+                placeID:
+                    home.id
+            )
+        )
+
+        await waitUntil {
+            manager.activeVisits
+                .isEmpty
+        }
+
+        for _ in 0..<100 {
+
+            let names =
+                await notifier
+                    .departurePlaceNames
+
+            if names == [
+                "Home"
+            ] {
+                break
+            }
+
+            try? await Task.sleep(
+                nanoseconds:
+                    1_000_000
+            )
+        }
+
+        #expect(
+            manager.activeVisits
+                .isEmpty
+        )
+
+        let departurePlaceNames =
+            await notifier
+                .departurePlaceNames
+
+        #expect(
+            departurePlaceNames
+                == [
+                    "Home"
+                ]
+        )
+
+        // 2. Simulate travel time between Home and Gym.
+        //
+        // No registered place should be active during
+        // this gap.
+        wifiProvider.network =
+            nil
+
+        #expect(
+            manager.activeVisits
+                .isEmpty
+        )
+
+        // 3. Arrive at Gym.
+        wifiProvider.network =
+            WiFiNetwork(
+                ssid:
+                    "GYM_WIFI",
+                bssid:
+                    nil
+            )
+
+        backgroundMonitor.emit(
+            .monitoredRegionEntered(
+                placeID:
+                    gym.id
+            )
+        )
+
+        await waitUntil {
+            manager.activeVisits
+                .first?
+                .placeID
+                == gym.id
+        }
+
+        for _ in 0..<100 {
+
+            let names =
+                await notifier
+                    .arrivalPlaceNames
+
+            if names == [
+                "Gym"
+            ] {
+                break
+            }
+
+            try? await Task.sleep(
+                nanoseconds:
+                    1_000_000
+            )
+        }
+
+        #expect(
+            manager.activeVisits.count
+                == 1
+        )
+
+        #expect(
+            manager.activeVisits
+                .first?
+                .placeID
+                == gym.id
+        )
+
+        let arrivalPlaceNames =
+            await notifier
+                .arrivalPlaceNames
+
+        #expect(
+            arrivalPlaceNames
+                == [
+                    "Gym"
+                ]
+        )
+
+        let events =
+            try await visitStore
+                .fetchEvents()
+
+        let departedEvents =
+            events.filter {
+                $0.kind == .departed
+            }
+
+        let arrivedEvents =
+            events.filter {
+                $0.kind == .arrived
+            }
+
+        #expect(
+            departedEvents.count
+                == 1
+        )
+
+        #expect(
+            departedEvents.first?
+                .placeID
+                == home.id
+        )
+
+        #expect(
+            arrivedEvents.count
+                == 2
+        )
+
+        #expect(
+            arrivedEvents.last?
+                .placeID
+                == gym.id
+        )
+
+        await manager
+            .stopBackgroundRecognition()
+    }
+
+    @Test
     func stopBackgroundRecognitionDoesNotStartOrStopContinuousTracking()
         async throws {
 
@@ -650,7 +1197,7 @@ struct PlaceVisitManagerBackgroundTests {
                 == 0
         )
     }
-    
+
     @Test
     func disablesCandidateRefreshWhenAllPlacesFit()
         async throws {
@@ -761,7 +1308,7 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
-    
+
     @Test
     func keepsSignificantLocationMonitoringEnabledWhileVisitIsActive()
         async throws {
@@ -864,7 +1411,7 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
-    
+
     @Test
     func enablesCandidateRefreshWhenPlacesExceedLimit()
         async throws {
@@ -980,7 +1527,7 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
-    
+
     @Test
     func significantLocationChangeReselectsNearbyCandidates()
         async throws {
@@ -1188,7 +1735,7 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
-    
+
     @Test
     func relaunchRestoresActiveVisitBeforeBufferedExitIsProcessed()
         async throws {
@@ -1325,7 +1872,7 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
-    
+
     @Test
     func relaunchProcessesBufferedEntryAfterListenerStarts()
         async throws {
@@ -1435,7 +1982,7 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
-    
+
     @Test
     func relaunchPrioritizesRestoredActiveVisitDuringCandidateSelection()
         async throws {
@@ -1563,7 +2110,7 @@ struct PlaceVisitManagerBackgroundTests {
         await manager
             .stopBackgroundRecognition()
     }
-    
+
     @Test
     func eventStreamFailureDisablesAndStopsBackgroundRecognition()
         async throws {
@@ -1657,7 +2204,7 @@ struct PlaceVisitManagerBackgroundTests {
                 .lastBackgroundErrorMessage != nil
         )
     }
-    
+
     @Test
     func authorizationLossStopsExistingBackgroundMonitoring()
         async throws {
@@ -1778,7 +2325,7 @@ struct PlaceVisitManagerBackgroundTests {
                 == 0
         )
     }
-    
+
     @Test
     func transientLocationFailureKeepsExistingBackgroundMonitoringWhenCandidateSelectionNeedsLocation()
         async throws {
@@ -1918,7 +2465,7 @@ struct PlaceVisitManagerBackgroundTests {
 
 private extension
     PlaceVisitManagerBackgroundTests {
-    
+
     func seedActiveVisit(
         place: RegisteredPlace,
         store: InMemoryPlaceVisitStore
@@ -2059,7 +2606,7 @@ private final class TestBackgroundRegionMonitor:
         self.pendingTriggers =
             pendingTriggers
     }
-    
+
     func fail(
         with error: any Error
     ) {
