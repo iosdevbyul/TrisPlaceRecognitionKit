@@ -1,8 +1,8 @@
 # TrisPlaceRecognitionKit
 
-A Swift Package for registering places, recognizing them from GPS and Wi-Fi signals, and recording confirmed arrival/departure visits on iOS.
+A Swift Package for registering places, recognizing them from GPS and Wi-Fi signals, recording confirmed arrival/departure visits, and optionally notifying users about confirmed place transitions on iOS.
 
-TrisPlaceRecognitionKit separates place registration, recognition, visit tracking, persistence, background place recognition, and UI so consuming apps can use only the pieces they need.
+TrisPlaceRecognitionKit separates place registration, recognition, visit tracking, persistence, background place recognition, diagnostics, notifications, and UI so consuming apps can use only the pieces they need.
 
 ## Features
 
@@ -16,7 +16,7 @@ TrisPlaceRecognitionKit separates place registration, recognition, visit trackin
 - Foreground recognition monitoring
 - Low-power background place recognition
 - System region monitoring for registered places
-- Significant-location-change candidate refresh only when the registered place set exceeds the region-monitoring budget
+- Significant-location-change candidate refresh
 - Prioritize active visits when choosing limited background monitoring candidates
 - High-level visit tracking with `PlaceVisitManager`
 - Arrival/departure confirmation with configurable timing policies
@@ -27,10 +27,14 @@ TrisPlaceRecognitionKit separates place registration, recognition, visit trackin
 - Recover buffered background region events after relaunch
 - Query visits by place and date range
 - Fetch the latest visit for a place
+- Optional local notifications for confirmed `ARRIVED` / `DEPARTED` visit events
+- Host-controlled notification permission flow
+- Diagnostic event logging and JSONL export support
 - SwiftData persistence on iOS 17+
 - JSON-backed place storage fallback for older supported iOS versions
 - Reusable SwiftUI place-management UI
 - Swift Testing coverage and GitHub Actions CI
+- Real-device background recognition and notification validation
 
 ## Requirements
 
@@ -48,7 +52,7 @@ Add TrisPlaceRecognitionKit with Swift Package Manager.
 dependencies: [
     .package(
         url: "https://github.com/iosdevbyul/TrisPlaceRecognitionKit",
-        branch: "main"
+        from: "1.0.0"
     )
 ]
 ```
@@ -107,9 +111,13 @@ System Region / Significant-Change Event
       PlaceVisitStateMachine
                 ↓
           Visit Storage
+                ↓
+      Optional Notification
 ```
 
 A system region event is only a trigger. It is not treated directly as an arrival or departure.
+
+A local notification is also not emitted directly from a raw region event. Notifications are based on confirmed visit events after visit persistence succeeds.
 
 ## RegisteredPlace
 
@@ -231,6 +239,8 @@ PlaceVisitCoordinator
 PlaceVisitStoring
         +
 Background Recognition
+        +
+Optional Notifications
 ```
 
 into a single observable object.
@@ -301,6 +311,71 @@ try await manager.refresh()
 ```
 
 Stopping foreground monitoring does not remove background region monitoring.
+
+## Place Visit Notifications
+
+Local place-visit notifications are opt-in.
+
+They are disabled by default so adding the package does not silently schedule system notifications.
+
+Enable them when creating `PlaceVisitManager`:
+
+```swift
+let manager = try PlaceVisitManager(
+    recognitionService: recognitionService,
+    recognitionPolicy: .wifiFirst,
+    placeVisitNotificationsEnabled: true
+)
+```
+
+The package can then schedule local notifications for confirmed visit events:
+
+```text
+ARRIVED
+→ "Gym에 도착했습니다."
+
+DEPARTED
+→ "Home에서 나왔습니다."
+```
+
+The notification flow is:
+
+```text
+Region / Recognition Event
+        ↓
+Real Place Recognition
+        ↓
+PlaceVisitCoordinator
+        ↓
+PlaceVisitEvent
+        ↓
+Visit persistence succeeds
+        ↓
+Local notification
+```
+
+Notification delivery is best-effort. Notification scheduling failure does not roll back an already persisted visit update.
+
+### Notification Permission
+
+The package does not request notification permission automatically.
+
+The host app is responsible for requesting permission through `UNUserNotificationCenter`.
+
+```swift
+import UserNotifications
+
+let granted = try await UNUserNotificationCenter
+    .current()
+    .requestAuthorization(
+        options: [
+            .alert,
+            .sound
+        ]
+    )
+```
+
+This keeps user-facing permission timing under control of the consuming app.
 
 ## Foreground Monitoring
 
@@ -401,6 +476,28 @@ DEPARTED
 
 A recognition failure is not converted into an empty result and therefore is not treated as a departure.
 
+### Realistic Travel Flow
+
+A visit does not need to transition directly from one registered place to another.
+
+A normal trip can contain a gap with no active visit:
+
+```text
+Home active
+    ↓
+Home region exit
+    ↓
+Home DEPARTED
+    ↓
+No active visit while traveling
+    ↓
+Gym region enter
+    ↓
+Gym ARRIVED
+```
+
+This flow is covered by the background visit tests.
+
 ### Candidate Selection
 
 Core Location has a limited monitoring budget. `BackgroundRecognitionPolicy` controls how many places this package may select.
@@ -432,7 +529,9 @@ Active visits are prioritized so a currently active place is not discarded simpl
 
 ### Significant-Location-Change Refresh
 
-If every registered place fits inside the configured monitoring limit, the package does not enable significant-location-change monitoring.
+Significant-location-change monitoring is used only when it is needed for candidate refresh or active-visit recovery.
+
+If every registered place fits inside the configured monitoring limit and there is no active visit requiring recovery support:
 
 ```text
 Registered places <= monitored candidate limit
@@ -448,21 +547,21 @@ Registered places > monitored candidate limit
 → Significant-location-change monitoring ON
 ```
 
-A significant location change is used only as a trigger to recalculate candidates.
+While an active visit exists, significant-location-change monitoring can also remain enabled to help recover departure state if needed.
+
+A significant location change is used as a low-power trigger, not as visit evidence by itself.
 
 ```text
 Significant movement
       ↓
-One current-location snapshot
+One recognition / refresh opportunity
       ↓
-Recalculate nearby candidates
-      ↓
-Synchronize monitored regions
+Visit revalidation or candidate synchronization
       ↓
 Idle
 ```
 
-It is not treated as visit evidence and does not create an arrival or departure by itself.
+It is not treated directly as an arrival or departure.
 
 ## Background Authorization
 
@@ -609,6 +708,8 @@ Visit events are either:
 .departed
 ```
 
+Only confirmed visit events are eligible to produce optional local notifications.
+
 ## Observation Gaps
 
 Visit confirmation is interrupted when the time between successful foreground observations becomes too large.
@@ -738,6 +839,36 @@ Visit updates are persisted atomically through:
 apply(_ update: PlaceVisitUpdate)
 ```
 
+## Diagnostics
+
+`PlaceVisitManager` exposes diagnostic event access for real-device validation and troubleshooting.
+
+```swift
+let events = try await manager.fetchDiagnosticEvents()
+```
+
+Clear stored diagnostic events with:
+
+```swift
+try await manager.clearDiagnosticEvents()
+```
+
+The demo app can export the diagnostic history as JSONL for inspection.
+
+Diagnostics cover areas such as:
+
+```text
+lifecycle
+authorization
+region synchronization
+region events
+recognition
+visit updates
+errors
+```
+
+The diagnostic flow intentionally avoids storing raw latitude/longitude values.
+
 ## Place Management
 
 `PlaceManagementService` supports:
@@ -788,7 +919,7 @@ The view provides place listing, registration, editing, deletion, duplicate warn
 
 ## Architecture
 
-The package keeps recognition logic, persistence, background system adapters, and presentation separate.
+The package keeps recognition logic, persistence, background system adapters, notifications, diagnostics, and presentation separate.
 
 ```text
 Presentation
@@ -799,7 +930,7 @@ Visit Manager / Background Recognition
     ↓
 Protocols
     ↓
-Storage / Wi-Fi / Location dependencies
+Storage / Wi-Fi / Location / Notification dependencies
 ```
 
 The recommended foreground visit-tracking flow is:
@@ -832,6 +963,10 @@ PlaceRecognitionService
 PlaceVisitCoordinator
         ↓
 PlaceVisitStateMachine
+        ↓
+Visit persistence
+        ↓
+Optional notification
 ```
 
 Apps that need lower-level foreground control can use the underlying public components directly.
@@ -868,11 +1003,31 @@ xcodebuild \
   test
 ```
 
-The test suite covers foreground recognition, visit persistence, background region synchronization, verified enter/exit processing, significant-location-change candidate reselection, background lifecycle failure handling, and relaunch recovery.
+The test suite covers:
+
+- Foreground recognition
+- Visit persistence
+- Background region synchronization
+- Verified enter/exit processing
+- Significant-location-change candidate reselection
+- Background lifecycle failure handling
+- Relaunch recovery
+- Arrival/departure notification dispatch
+- Travel-gap transitions such as `Home → no active visit → Gym`
 
 The CI workflow also selects an available iOS Simulator dynamically.
 
-Background delivery behavior should also be validated on physical devices before release because system location delivery depends on device capabilities and runtime conditions.
+Background delivery and notification behavior should also be validated on physical devices because system location delivery depends on device capabilities and runtime conditions.
+
+## Release
+
+Current stable release:
+
+```text
+1.0.0
+```
+
+Swift Package Manager consumers should depend on the semantic version rather than the `main` branch for stable integration.
 
 ## Current Limitations
 
@@ -881,13 +1036,11 @@ Background delivery behavior should also be validated on physical devices before
 - Core Location monitoring capacity is shared at the app level. Other location features in the consuming app can reduce the region capacity available to this package.
 - The iOS 15-compatible region backend uses `CLLocationManager` region monitoring. Newer SDKs provide newer condition-monitoring APIs, but the package currently preserves iOS 15 deployment compatibility.
 - Background recognition is intentionally limited to place arrival/departure detection and candidate refresh. It is not a general background route-tracking system.
-- Real background/relaunch behavior must be validated on physical devices in addition to simulator unit tests.
+- Background delivery remains subject to Core Location runtime behavior and should be validated on physical devices.
 
 ## Roadmap
 
 - Evaluate a newer Core Location condition-monitoring backend while preserving the supported deployment strategy
 - Storage-native visit query optimization
-- Visit-history UI in the demo app
+- Visit-history UI improvements in the demo app
 - Public API documentation cleanup
-- Real-device background recognition verification
-- 1.0.0 release preparation
