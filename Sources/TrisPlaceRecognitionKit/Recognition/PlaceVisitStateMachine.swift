@@ -53,8 +53,8 @@ public struct PlaceVisitStateMachine: Sendable {
 
         self.policy = policy
 
-        var restoredStates: [UUID: State] = [:]
         var visitIDs = Set<UUID>()
+        var placeIDs = Set<UUID>()
 
         for record in activeVisits {
 
@@ -67,16 +67,36 @@ public struct PlaceVisitStateMachine: Sendable {
                 throw PlaceVisitRestorationError.duplicateVisit
             }
 
-            guard restoredStates[record.placeID] == nil else {
+            guard placeIDs.insert(record.placeID).inserted else {
                 throw PlaceVisitRestorationError.duplicatePlace
             }
-
-            restoredStates[record.placeID] = .inside(
-                record: record
-            )
         }
 
-        self.states = restoredStates
+        if let mostRecentVisit =
+            activeVisits.max(
+                by: {
+                    if $0.startedAt == $1.startedAt {
+                        return $0.id.uuidString
+                            < $1.id.uuidString
+                    }
+
+                    return $0.startedAt
+                        < $1.startedAt
+                }
+            ) {
+
+            self.states = [
+                mostRecentVisit.placeID:
+                    .inside(
+                        record:
+                            mostRecentVisit
+                    )
+            ]
+
+        } else {
+
+            self.states = [:]
+        }
 
         // Prevent restored visits from processing an
         // observation older than their start times.
@@ -141,15 +161,16 @@ public struct PlaceVisitStateMachine: Sendable {
 
         lastProcessedAt = timestamp
 
-        var recognizedByID: [UUID: RecognizedPlace] = [:]
+        var recognizedByID:
+            [UUID: RecognizedPlace] = [:]
 
-        for recognizedPlace in recognizedPlaces {
+        if let recognizedPlace =
+            recognizedPlaces.first {
 
-            let placeID = recognizedPlace.place.id
-
-            if recognizedByID[placeID] == nil {
-                recognizedByID[placeID] = recognizedPlace
-            }
+            recognizedByID[
+                recognizedPlace.place.id
+            ] =
+                recognizedPlace
         }
 
         if hasObservationGap {
@@ -176,22 +197,51 @@ public struct PlaceVisitStateMachine: Sendable {
 
                     if policy.arrivalConfirmationInterval == 0 {
 
-                        let record = makeVisit(
-                            for: recognizedPlace,
-                            at: timestamp
+                        let previousVisitUpdate =
+                            finishOtherActiveVisits(
+                                except:
+                                    placeID,
+                                at:
+                                    timestamp
+                            )
+
+                        events.append(
+                            contentsOf:
+                                previousVisitUpdate.events
                         )
 
-                        states[placeID] = .inside(
-                            record: record
+                        endedVisits.append(
+                            contentsOf:
+                                previousVisitUpdate
+                                    .endedVisits
                         )
 
-                        startedVisits.append(record)
+                        let record =
+                            makeVisit(
+                                for:
+                                    recognizedPlace,
+                                at:
+                                    timestamp
+                            )
+
+                        states[placeID] =
+                            .inside(
+                                record:
+                                    record
+                            )
+
+                        startedVisits.append(
+                            record
+                        )
 
                         events.append(
                             makeEvent(
-                                kind: .arrived,
-                                record: record,
-                                at: timestamp
+                                kind:
+                                    .arrived,
+                                record:
+                                    record,
+                                at:
+                                    timestamp
                             )
                         )
 
@@ -215,22 +265,51 @@ public struct PlaceVisitStateMachine: Sendable {
                         continue
                     }
 
-                    let record = makeVisit(
-                        for: recognizedPlace,
-                        at: timestamp
+                    let previousVisitUpdate =
+                        finishOtherActiveVisits(
+                            except:
+                                placeID,
+                            at:
+                                timestamp
+                        )
+
+                    events.append(
+                        contentsOf:
+                            previousVisitUpdate.events
                     )
 
-                    states[placeID] = .inside(
-                        record: record
+                    endedVisits.append(
+                        contentsOf:
+                            previousVisitUpdate
+                                .endedVisits
                     )
 
-                    startedVisits.append(record)
+                    let record =
+                        makeVisit(
+                            for:
+                                recognizedPlace,
+                            at:
+                                timestamp
+                        )
+
+                    states[placeID] =
+                        .inside(
+                            record:
+                                record
+                        )
+
+                    startedVisits.append(
+                        record
+                    )
 
                     events.append(
                         makeEvent(
-                            kind: .arrived,
-                            record: record,
-                            at: timestamp
+                            kind:
+                                .arrived,
+                            record:
+                                record,
+                            at:
+                                timestamp
                         )
                     )
 
@@ -409,10 +488,12 @@ public struct PlaceVisitStateMachine: Sendable {
             )
 
         case .significantLocationChange:
-
-            // Significant movement is used to refresh
-            // monitoring candidates, not to infer visits.
-            return PlaceVisitUpdate()
+            return processVerifiedSignificantLocationChange(
+                    recognizedPlaces:
+                        recognizedPlaces,
+                    at:
+                        timestamp
+                )
         }
     }
 }
@@ -425,10 +506,12 @@ private extension PlaceVisitStateMachine {
         at timestamp: Date
     ) -> PlaceVisitUpdate {
 
-        guard let recognizedPlace =
+        guard
+            let recognizedPlace =
                 recognizedPlaces.first(
                     where: {
-                        $0.place.id == placeID
+                        $0.place.id
+                            == placeID
                     }
                 )
         else {
@@ -443,28 +526,50 @@ private extension PlaceVisitStateMachine {
         case nil,
              .some(.arrivalPending):
 
-            let record = makeVisit(
-                for: recognizedPlace,
-                at: timestamp
-            )
+            let previousVisitUpdate =
+                finishOtherActiveVisits(
+                    except:
+                        placeID,
+                    at:
+                        timestamp
+                )
 
-            states[placeID] = .inside(
-                record: record
-            )
+            let record =
+                makeVisit(
+                    for:
+                        recognizedPlace,
+                    at:
+                        timestamp
+                )
 
-            let event = makeEvent(
-                kind: .arrived,
-                record: record,
-                at: timestamp
-            )
+            states[placeID] =
+                .inside(
+                    record:
+                        record
+                )
+
+            let arrivalEvent =
+                makeEvent(
+                    kind:
+                        .arrived,
+                    record:
+                        record,
+                    at:
+                        timestamp
+                )
 
             return PlaceVisitUpdate(
-                events: [
-                    event
-                ],
+                events:
+                    previousVisitUpdate.events
+                    + [
+                        arrivalEvent
+                    ],
                 startedVisits: [
                     record
-                ]
+                ],
+                endedVisits:
+                    previousVisitUpdate
+                        .endedVisits
             )
 
         case .some(.inside):
@@ -472,14 +577,19 @@ private extension PlaceVisitStateMachine {
             return PlaceVisitUpdate()
 
         case .some(
-            .departurePending(let record, _)
+            .departurePending(
+                let record,
+                _
+            )
         ):
 
             // Actual recognition disproved the pending
             // departure. Keep the original visit.
-            states[placeID] = .inside(
-                record: record
-            )
+            states[placeID] =
+                .inside(
+                    record:
+                        record
+                )
 
             return PlaceVisitUpdate()
         }
@@ -544,6 +654,227 @@ private extension PlaceVisitStateMachine {
         }
     }
 
+    mutating func finishOtherActiveVisits(
+        except retainedPlaceID: UUID,
+        at timestamp: Date
+    ) -> PlaceVisitUpdate {
+
+        let otherPlaceIDs =
+            states.keys
+                .filter {
+                    $0 != retainedPlaceID
+                }
+                .sorted {
+                    $0.uuidString
+                        < $1.uuidString
+                }
+
+        var events:
+            [PlaceVisitEvent] = []
+
+        var endedVisits:
+            [PlaceVisitRecord] = []
+
+        for placeID in otherPlaceIDs {
+
+            guard
+                let state =
+                    states[placeID]
+            else {
+                continue
+            }
+
+            switch state {
+
+            case .arrivalPending:
+
+                // A verified entry supersedes any pending
+                // arrival for another place.
+                states.removeValue(
+                    forKey:
+                        placeID
+                )
+
+            case .inside(
+                let record
+            ),
+            .departurePending(
+                let record,
+                _
+            ):
+
+                let endedRecord =
+                    record.ending(
+                        at:
+                            timestamp
+                    )
+
+                states.removeValue(
+                    forKey:
+                        placeID
+                )
+
+                endedVisits.append(
+                    endedRecord
+                )
+
+                events.append(
+                    makeEvent(
+                        kind:
+                            .departed,
+                        record:
+                            endedRecord,
+                        at:
+                            timestamp
+                    )
+                )
+            }
+        }
+
+        return PlaceVisitUpdate(
+            events:
+                events,
+            endedVisits:
+                endedVisits
+        )
+    }
+    
+    mutating func processVerifiedSignificantLocationChange(
+        recognizedPlaces: [RecognizedPlace],
+        at timestamp: Date
+    ) -> PlaceVisitUpdate {
+
+        let recognizedPlaceIDs =
+            Set(
+                recognizedPlaces.map {
+                    $0.place.id
+                }
+            )
+
+        let placeIDs =
+            states.keys
+                .sorted {
+                    $0.uuidString
+                        < $1.uuidString
+                }
+
+        var events:
+            [PlaceVisitEvent] = []
+
+        var endedVisits:
+            [PlaceVisitRecord] = []
+
+        for placeID in placeIDs {
+
+            guard
+                let state =
+                    states[placeID]
+            else {
+                continue
+            }
+
+            switch state {
+
+            case .arrivalPending:
+
+                // Significant movement must never confirm
+                // an arrival by itself.
+                continue
+
+            case .inside(
+                let record
+            ):
+
+                guard
+                    !recognizedPlaceIDs.contains(
+                        placeID
+                    )
+                else {
+                    continue
+                }
+
+                let endedRecord =
+                    record.ending(
+                        at:
+                            timestamp
+                    )
+
+                states.removeValue(
+                    forKey:
+                        placeID
+                )
+
+                endedVisits.append(
+                    endedRecord
+                )
+
+                events.append(
+                    makeEvent(
+                        kind:
+                            .departed,
+                        record:
+                            endedRecord,
+                        at:
+                            timestamp
+                    )
+                )
+
+            case .departurePending(
+                let record,
+                _
+            ):
+
+                if recognizedPlaceIDs.contains(
+                    placeID
+                ) {
+
+                    // Movement occurred, but recognition
+                    // still confirms the place.
+                    states[placeID] =
+                        .inside(
+                            record:
+                                record
+                        )
+
+                    continue
+                }
+
+                let endedRecord =
+                    record.ending(
+                        at:
+                            timestamp
+                    )
+
+                states.removeValue(
+                    forKey:
+                        placeID
+                )
+
+                endedVisits.append(
+                    endedRecord
+                )
+
+                events.append(
+                    makeEvent(
+                        kind:
+                            .departed,
+                        record:
+                            endedRecord,
+                        at:
+                            timestamp
+                    )
+                )
+            }
+        }
+
+        return PlaceVisitUpdate(
+            events:
+                events,
+            endedVisits:
+                endedVisits
+        )
+    }
+    
     mutating func finishVerifiedVisit(
         _ record: PlaceVisitRecord,
         at timestamp: Date

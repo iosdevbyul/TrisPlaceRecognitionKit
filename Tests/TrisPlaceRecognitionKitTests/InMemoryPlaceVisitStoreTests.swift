@@ -256,6 +256,189 @@ struct InMemoryPlaceVisitStoreTests {
     }
 
     @Test
+    func atomicallyTransitionsActiveVisitToDifferentPlace()
+        async throws {
+
+        let store =
+            InMemoryPlaceVisitStore()
+
+        let home =
+            makeVisit(
+                placeID:
+                    UUID()
+            )
+
+        try await store.apply(
+            makeArrivalUpdate(
+                home
+            )
+        )
+
+        let endedHome =
+            home.ending(
+                at:
+                    time(120)
+            )
+
+        let gym =
+            makeVisit(
+                placeID:
+                    UUID(),
+                startedAt:
+                    time(120)
+            )
+
+        let update =
+            PlaceVisitUpdate(
+                events: [
+                    PlaceVisitEvent(
+                        visitID:
+                            endedHome.id,
+                        placeID:
+                            endedHome.placeID,
+                        kind:
+                            .departed,
+                        occurredAt:
+                            time(120)
+                    ),
+                    PlaceVisitEvent(
+                        visitID:
+                            gym.id,
+                        placeID:
+                            gym.placeID,
+                        kind:
+                            .arrived,
+                        occurredAt:
+                            time(120)
+                    )
+                ],
+                startedVisits: [
+                    gym
+                ],
+                endedVisits: [
+                    endedHome
+                ]
+            )
+
+        try await store.apply(
+            update
+        )
+
+        let activeVisits =
+            try await store
+                .fetchActiveVisits()
+
+        #expect(
+            activeVisits == [
+                gym
+            ]
+        )
+
+        let visits =
+            try await store
+                .fetchAll()
+
+        #expect(
+            visits.count == 2
+        )
+
+        #expect(
+            visits.first {
+                $0.id == home.id
+            }?
+            .endedAt
+                == time(120)
+        )
+
+        let events =
+            try await store
+                .fetchEvents()
+
+        #expect(
+            events.count == 3
+        )
+
+        #expect(
+            events.filter {
+                $0.kind == .arrived
+            }.count == 2
+        )
+
+        #expect(
+            events.filter {
+                $0.kind == .departed
+            }.count == 1
+        )
+
+        #expect(
+            events.contains {
+                $0.visitID == endedHome.id
+                    && $0.kind == .departed
+                    && $0.occurredAt == time(120)
+            }
+        )
+
+        #expect(
+            events.contains {
+                $0.visitID == gym.id
+                    && $0.kind == .arrived
+                    && $0.occurredAt == time(120)
+            }
+        )
+    }
+    
+    @Test
+    func rejectsSecondActiveVisitAtDifferentPlace()
+        async throws {
+
+        let store =
+            InMemoryPlaceVisitStore()
+
+        let home =
+            makeVisit(
+                placeID:
+                    UUID()
+            )
+
+        let gym =
+            makeVisit(
+                placeID:
+                    UUID(),
+                startedAt:
+                    time(60)
+            )
+
+        try await store.apply(
+            makeArrivalUpdate(
+                home
+            )
+        )
+
+        await #expect(
+            throws:
+                PlaceVisitStorageError
+                    .activeVisitAlreadyExists
+        ) {
+
+            try await store.apply(
+                makeArrivalUpdate(
+                    gym
+                )
+            )
+        }
+
+        let activeVisits =
+            try await store
+                .fetchActiveVisits()
+
+        #expect(
+            activeVisits == [
+                home
+            ]
+        )
+    }
+    
+    @Test
     func allowsNewVisitAfterPreviousVisitEnded() async throws {
         let store = InMemoryPlaceVisitStore()
         let placeID = UUID()

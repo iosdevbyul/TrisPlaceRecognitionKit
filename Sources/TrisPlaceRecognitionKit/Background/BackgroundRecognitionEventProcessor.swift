@@ -76,16 +76,8 @@ final class BackgroundRecognitionEventProcessor {
 
         switch trigger {
 
-        case .significantLocationChange:
-
-            return BackgroundRecognitionProcessingResult(
-                recognizedPlaces:
-                    [],
-                visitUpdate:
-                    PlaceVisitUpdate()
-            )
-
-        case .monitoredRegionEntered,
+        case .significantLocationChange,
+             .monitoredRegionEntered,
              .monitoredRegionExited:
 
             break

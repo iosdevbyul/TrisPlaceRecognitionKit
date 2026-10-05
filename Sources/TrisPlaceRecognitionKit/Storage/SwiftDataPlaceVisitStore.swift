@@ -191,70 +191,6 @@ public actor SwiftDataPlaceVisitStore:
         var expectedEvents:
             [VisitEventKey: Date] = [:]
 
-        // MARK: - Validate Started Visits
-
-        for record in update
-            .startedVisits {
-
-            guard
-                record.endedAt == nil,
-                record.startedAt
-                    .timeIntervalSince1970
-                    .isFinite
-            else {
-
-                throw PlaceVisitStorageError
-                    .invalidVisitRecord
-            }
-
-            guard
-                nextVisits[
-                    record.id
-                ] == nil
-            else {
-
-                throw PlaceVisitStorageError
-                    .duplicateVisit
-            }
-
-            let hasActiveVisit =
-                nextVisits
-                    .values
-                    .contains {
-
-                        $0.placeID
-                            == record.placeID
-                        && $0.isActive
-                    }
-
-            guard
-                !hasActiveVisit
-            else {
-
-                throw PlaceVisitStorageError
-                    .activeVisitAlreadyExists
-            }
-
-            nextVisits[
-                record.id
-            ] = record
-
-            let key =
-                VisitEventKey(
-                    visitID:
-                        record.id,
-                    kindRawValue:
-                        PlaceVisitEvent
-                            .Kind
-                            .arrived
-                            .rawValue
-                )
-
-            expectedEvents[
-                key
-            ] = record.startedAt
-        }
-
         // MARK: - Validate Ended Visits
 
         for record in update
@@ -317,6 +253,67 @@ public actor SwiftDataPlaceVisitStore:
             expectedEvents[
                 key
             ] = endedAt
+        }
+        
+        // MARK: - Validate Started Visits
+
+        for record in update
+            .startedVisits {
+
+            guard
+                record.endedAt == nil,
+                record.startedAt
+                    .timeIntervalSince1970
+                    .isFinite
+            else {
+
+                throw PlaceVisitStorageError
+                    .invalidVisitRecord
+            }
+
+            guard
+                nextVisits[
+                    record.id
+                ] == nil
+            else {
+
+                throw PlaceVisitStorageError
+                    .duplicateVisit
+            }
+
+            let hasActiveVisit =
+                nextVisits
+                    .values
+                    .contains {
+                        $0.isActive
+                    }
+
+            guard
+                !hasActiveVisit
+            else {
+
+                throw PlaceVisitStorageError
+                    .activeVisitAlreadyExists
+            }
+
+            nextVisits[
+                record.id
+            ] = record
+
+            let key =
+                VisitEventKey(
+                    visitID:
+                        record.id,
+                    kindRawValue:
+                        PlaceVisitEvent
+                            .Kind
+                            .arrived
+                            .rawValue
+                )
+
+            expectedEvents[
+                key
+            ] = record.startedAt
         }
 
         // MARK: - Validate Events

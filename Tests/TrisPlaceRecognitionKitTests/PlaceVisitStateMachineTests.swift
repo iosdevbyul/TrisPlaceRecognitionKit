@@ -267,46 +267,68 @@ struct PlaceVisitStateMachineTests {
     // MARK: - Multiple Places
 
     @Test
-    func managesMultiplePlacesIndependently() throws {
+    func keepsOnlyHighestPriorityRecognizedPlaceActive() throws {
 
-        let gym = try makePlace(name: "Gym")
-        let home = try makePlace(name: "Home")
-
-        var machine = PlaceVisitStateMachine(
-            policy: PlaceVisitPolicy(
-                arrivalConfirmationInterval: 0,
-                departureConfirmationInterval: 0
+        let gym =
+            try makePlace(
+                name:
+                    "Gym"
             )
-        )
 
-        let arrivals = machine.process(
-            [
-                recognize(gym),
-                recognize(home)
-            ],
-            at: time(0)
-        )
+        let home =
+            try makePlace(
+                name:
+                    "Home"
+            )
 
-        #expect(arrivals.events.count == 2)
-        #expect(arrivals.startedVisits.count == 2)
-        #expect(machine.activeVisits.count == 2)
+        var machine =
+            PlaceVisitStateMachine(
+                policy:
+                    PlaceVisitPolicy(
+                        arrivalConfirmationInterval:
+                            0,
+                        departureConfirmationInterval:
+                            0
+                    )
+            )
 
-        let update = machine.process(
-            [recognize(home)],
-            at: time(30)
-        )
+        let arrivals =
+            machine.process(
+                [
+                    recognize(
+                        gym
+                    ),
+                    recognize(
+                        home
+                    )
+                ],
+                at:
+                    time(0)
+            )
 
-        #expect(update.events.count == 1)
         #expect(
-            update.events.first?.kind == .departed
-        )
-        #expect(
-            update.events.first?.placeID == gym.id
+            arrivals.startedVisits.count
+                == 1
         )
 
-        #expect(machine.activeVisits.count == 1)
         #expect(
-            machine.activeVisits.first?.placeID == home.id
+            arrivals.events.count
+                == 1
+        )
+
+        #expect(
+            machine.activeVisits.count
+                == 1
+        )
+
+        let activePlaceID =
+            try #require(
+                machine.activeVisits.first?.placeID
+            )
+
+        #expect(
+            activePlaceID
+                == gym.id
         )
     }
 
@@ -642,6 +664,251 @@ struct PlaceVisitStateMachineTests {
 
         #expect(result.events.isEmpty)
         #expect(machine.activeVisits.isEmpty)
+    }
+    
+    @Test
+    func verifiedEntryEndsPreviousActiveVisitBeforeStartingNewVisit() throws {
+
+        let home =
+            try makePlace(
+                name:
+                    "Home"
+            )
+
+        let gym =
+            try makePlace(
+                name:
+                    "Gym"
+            )
+
+        var machine =
+            PlaceVisitStateMachine(
+                policy:
+                    PlaceVisitPolicy(
+                        arrivalConfirmationInterval:
+                            0,
+                        departureConfirmationInterval:
+                            60
+                    )
+            )
+
+        let homeArrival =
+            machine.process(
+                [
+                    recognize(
+                        home
+                    )
+                ],
+                at:
+                    time(0)
+            )
+
+        let homeVisit =
+            try #require(
+                homeArrival
+                    .startedVisits
+                    .first
+            )
+
+        let gymEntry =
+            machine
+                .processVerifiedBackgroundObservation(
+                    [
+                        recognize(
+                            gym
+                        )
+                    ],
+                    trigger:
+                        .monitoredRegionEntered(
+                            placeID:
+                                gym.id
+                        ),
+                    at:
+                        time(300)
+                )
+
+        #expect(
+            gymEntry.startedVisits.count
+                == 1
+        )
+
+        #expect(
+            gymEntry.endedVisits.count
+                == 1
+        )
+
+        #expect(
+            gymEntry.endedVisits.first?.id
+                == homeVisit.id
+        )
+
+        #expect(
+            gymEntry.endedVisits.first?.endedAt
+                == time(300)
+        )
+
+        #expect(
+            gymEntry.events.map(\.kind)
+                == [
+                    .departed,
+                    .arrived
+                ]
+        )
+
+        #expect(
+            machine.activeVisits.count
+                == 1
+        )
+
+        #expect(
+            machine.activeVisits.first?.placeID
+                == gym.id
+        )
+    }
+
+    @Test
+    func significantLocationChangeEndsActiveVisitWhenPlaceIsNoLongerRecognized() throws {
+
+        let home =
+            try makePlace(
+                name:
+                    "Home"
+            )
+
+        var machine =
+            PlaceVisitStateMachine(
+                policy:
+                    PlaceVisitPolicy(
+                        arrivalConfirmationInterval:
+                            0,
+                        departureConfirmationInterval:
+                            60
+                    )
+            )
+
+        let arrival =
+            machine.process(
+                [
+                    recognize(
+                        home
+                    )
+                ],
+                at:
+                    time(0)
+            )
+
+        let visit =
+            try #require(
+                arrival
+                    .startedVisits
+                    .first
+            )
+
+        let departure =
+            machine
+                .processVerifiedBackgroundObservation(
+                    [],
+                    trigger:
+                        .significantLocationChange,
+                    at:
+                        time(600)
+                )
+
+        #expect(
+            departure.startedVisits.isEmpty
+        )
+
+        #expect(
+            departure.endedVisits.count
+                == 1
+        )
+
+        #expect(
+            departure.endedVisits.first?.id
+                == visit.id
+        )
+
+        #expect(
+            departure.endedVisits.first?.endedAt
+                == time(600)
+        )
+
+        #expect(
+            departure.events.count
+                == 1
+        )
+
+        #expect(
+            departure.events.first?.kind
+                == .departed
+        )
+
+        #expect(
+            machine.activeVisits.isEmpty
+        )
+    }
+    
+    // MARK: - Restoration
+
+    @Test
+    func restoresOnlyMostRecentActiveVisit() throws {
+
+        let home =
+            try makePlace(
+                name:
+                    "Home"
+            )
+
+        let gym =
+            try makePlace(
+                name:
+                    "Gym"
+            )
+
+        let olderVisit =
+            PlaceVisitRecord(
+                placeID:
+                    home.id,
+                startedAt:
+                    time(0),
+                arrivalEvidence:
+                    .gpsOnlyNoWiFiConfigured
+            )
+
+        let newerVisit =
+            PlaceVisitRecord(
+                placeID:
+                    gym.id,
+                startedAt:
+                    time(300),
+                arrivalEvidence:
+                    .gpsOnlyNoWiFiConfigured
+            )
+
+        let machine =
+            try PlaceVisitStateMachine(
+                policy:
+                    .init(),
+                restoring: [
+                    olderVisit,
+                    newerVisit
+                ]
+            )
+
+        #expect(
+            machine.activeVisits.count
+                == 1
+        )
+
+        #expect(
+            machine.activeVisits.first?.id
+                == newerVisit.id
+        )
+
+        #expect(
+            machine.activeVisits.first?.placeID
+                == gym.id
+        )
     }
 }
 

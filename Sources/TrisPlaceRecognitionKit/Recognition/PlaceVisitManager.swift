@@ -888,9 +888,10 @@ private extension PlaceVisitManager {
             ]
         )
 
-        let requiresCandidateRefresh =
-            places.count
-                > candidates.count
+            let requiresCandidateRefresh =
+                places.count
+                    > candidates.count
+                    || !activeVisits.isEmpty
 
         do {
 
@@ -1170,8 +1171,65 @@ private extension PlaceVisitManager {
                     "location.significantChange"
             )
 
-            try await synchronizeBackgroundMonitoring()
+            if !activeVisits.isEmpty {
 
+                await recordDiagnostic(
+                    category:
+                        .recognition,
+                    name:
+                        "recognition.started"
+                )
+
+                let result =
+                    try await backgroundEventProcessor
+                        .handle(
+                            trigger
+                        )
+
+                await recordDiagnostic(
+                    category:
+                        .recognition,
+                    name:
+                        "recognition.completed",
+                    metadata: [
+                        "recognizedCount":
+                            "\(result.recognizedPlaces.count)",
+                        "recognizedPlaceIDs":
+                            result
+                                .recognizedPlaces
+                                .map {
+                                    $0.place.id
+                                        .uuidString
+                                }
+                                .joined(
+                                    separator:
+                                        ","
+                                )
+                    ]
+                )
+
+                await recordDiagnostic(
+                    category:
+                        .visit,
+                    name:
+                        "visit.update",
+                    metadata: [
+                        "events":
+                            "\(result.visitUpdate.events.count)",
+                        "startedVisits":
+                            "\(result.visitUpdate.startedVisits.count)",
+                        "endedVisits":
+                            "\(result.visitUpdate.endedVisits.count)"
+                    ]
+                )
+
+                activeVisits =
+                    try await coordinator
+                        .activeVisits()
+            }
+
+            try await synchronizeBackgroundMonitoring()
+            
         case .monitoredRegionEntered,
              .monitoredRegionExited:
 

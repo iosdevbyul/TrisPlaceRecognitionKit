@@ -481,24 +481,43 @@ struct BackgroundRecognitionEventProcessorTests {
     }
 
     @Test
-    func significantLocationChangeDoesNotRunVisitRecognition()
+    func significantLocationChangeRevalidatesActiveVisit()
         async throws {
 
         let locationProvider =
             MockLocationProvider()
 
-        locationProvider.requestCurrentLocationError =
-            BackgroundRecognitionProcessorTestError
-                .locationUnavailable
-
         let wifiProvider =
-            MockWiFiProvider()
+            MockWiFiProvider(
+                network:
+                    nil
+            )
 
         let placeStore =
             MockPlaceStore()
 
         let visitStore =
             InMemoryPlaceVisitStore()
+
+        let gym =
+            try makePlace(
+                name:
+                    "Gym",
+                ssid:
+                    "GYM_WIFI"
+            )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let existingVisit =
+            try await seedActiveVisit(
+                place:
+                    gym,
+                store:
+                    visitStore
+            )
 
         let recognitionService =
             PlaceRecognitionService(
@@ -512,10 +531,12 @@ struct BackgroundRecognitionEventProcessorTests {
 
         let coordinator =
             PlaceVisitCoordinator(
-                store: visitStore
+                store:
+                    visitStore
             )
 
-        _ = try await coordinator.restore()
+        _ =
+            try await coordinator.restore()
 
         let processor =
             BackgroundRecognitionEventProcessor(
@@ -524,27 +545,346 @@ struct BackgroundRecognitionEventProcessorTests {
                 coordinator:
                     coordinator,
                 recognitionPolicy:
-                    .gpsConstrained
+                    .wifiFirst
             )
 
         let update =
             try await processor.handle(
                 .significantLocationChange,
-                at: time(100)
+                at:
+                    time(600)
             )
 
-        #expect(update.events.isEmpty)
-
         #expect(
-            locationProvider
-                .requestCurrentLocationCallCount
-                == 0
+            update.events.count
+                == 1
         )
 
         #expect(
-            wifiProvider
-                .currentNetworkCallCount
-                == 0
+            update.events.first?.kind
+                == .departed
+        )
+
+        #expect(
+            update.endedVisits.count
+                == 1
+        )
+
+        #expect(
+            update.endedVisits.first?.id
+                == existingVisit.id
+        )
+
+        #expect(
+            try await coordinator
+                .activeVisits()
+                .isEmpty
+        )
+    }
+    
+    @Test
+    func backgroundRoundTripPersistsHomeGymHomeVisitHistory()
+        async throws {
+
+        let locationProvider =
+            MockLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider()
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let home =
+            try makePlace(
+                name:
+                    "Home",
+                ssid:
+                    "HOME_WIFI"
+            )
+
+        let gym =
+            try makePlace(
+                name:
+                    "Gym",
+                ssid:
+                    "GYM_WIFI"
+            )
+
+        try await placeStore.save(
+            home
+        )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let initialHomeVisit =
+            try await seedActiveVisit(
+                place:
+                    home,
+                store:
+                    visitStore
+            )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let coordinator =
+            PlaceVisitCoordinator(
+                store:
+                    visitStore
+            )
+
+        _ =
+            try await coordinator.restore()
+
+        let processor =
+            BackgroundRecognitionEventProcessor(
+                recognitionService:
+                    recognitionService,
+                coordinator:
+                    coordinator,
+                recognitionPolicy:
+                    .wifiFirst
+            )
+
+        // 10:00 - Home departure confirmed.
+        wifiProvider.network =
+            nil
+
+        let homeExitUpdate =
+            try await processor.handle(
+                .monitoredRegionExited(
+                    placeID:
+                        home.id
+                ),
+                at:
+                    time(600)
+            )
+
+        #expect(
+            homeExitUpdate
+                .endedVisits
+                .first?
+                .id
+                == initialHomeVisit.id
+        )
+
+        // 10:10 - Gym arrival confirmed.
+        wifiProvider.network =
+            WiFiNetwork(
+                ssid:
+                    "GYM_WIFI",
+                bssid:
+                    nil
+            )
+
+        let gymEntryUpdate =
+            try await processor.handle(
+                .monitoredRegionEntered(
+                    placeID:
+                        gym.id
+                ),
+                at:
+                    time(1_200)
+            )
+
+        let gymVisit =
+            try #require(
+                gymEntryUpdate
+                    .startedVisits
+                    .first
+            )
+
+        #expect(
+            gymVisit.placeID
+                == gym.id
+        )
+
+        // 11:00 - Gym departure confirmed.
+        wifiProvider.network =
+            nil
+
+        let gymExitUpdate =
+            try await processor.handle(
+                .monitoredRegionExited(
+                    placeID:
+                        gym.id
+                ),
+                at:
+                    time(4_200)
+            )
+
+        let completedGymVisit =
+            try #require(
+                gymExitUpdate
+                    .endedVisits
+                    .first
+            )
+
+        #expect(
+            completedGymVisit.id
+                == gymVisit.id
+        )
+
+        #expect(
+            completedGymVisit.duration
+                == 3_000
+        )
+
+        // 11:10 - Home arrival confirmed again.
+        wifiProvider.network =
+            WiFiNetwork(
+                ssid:
+                    "HOME_WIFI",
+                bssid:
+                    nil
+            )
+
+        let homeReturnUpdate =
+            try await processor.handle(
+                .monitoredRegionEntered(
+                    placeID:
+                        home.id
+                ),
+                at:
+                    time(4_800)
+            )
+
+        let returnedHomeVisit =
+            try #require(
+                homeReturnUpdate
+                    .startedVisits
+                    .first
+            )
+
+        #expect(
+            returnedHomeVisit.placeID
+                == home.id
+        )
+
+        // Simulate opening the app again after the
+        // background round trip.
+        let restoredCoordinator =
+            PlaceVisitCoordinator(
+                store:
+                    visitStore
+            )
+
+        let restoredActiveVisits =
+            try await restoredCoordinator
+                .restore()
+
+        #expect(
+            restoredActiveVisits.count
+                == 1
+        )
+
+        #expect(
+            restoredActiveVisits.first?.id
+                == returnedHomeVisit.id
+        )
+
+        #expect(
+            restoredActiveVisits.first?.placeID
+                == home.id
+        )
+
+        let storedVisits =
+            try await visitStore
+                .fetchAll()
+
+        #expect(
+            storedVisits.count
+                == 3
+        )
+
+        let storedInitialHomeVisit =
+            try #require(
+                storedVisits.first {
+                    $0.id
+                        == initialHomeVisit.id
+                }
+            )
+
+        #expect(
+            storedInitialHomeVisit.endedAt
+                == time(600)
+        )
+
+        let storedGymVisit =
+            try #require(
+                storedVisits.first {
+                    $0.id
+                        == gymVisit.id
+                }
+            )
+
+        #expect(
+            storedGymVisit.startedAt
+                == time(1_200)
+        )
+
+        #expect(
+            storedGymVisit.endedAt
+                == time(4_200)
+        )
+
+        #expect(
+            storedGymVisit.duration
+                == 3_000
+        )
+
+        let storedReturnedHomeVisit =
+            try #require(
+                storedVisits.first {
+                    $0.id
+                        == returnedHomeVisit.id
+                }
+            )
+
+        #expect(
+            storedReturnedHomeVisit.startedAt
+                == time(4_800)
+        )
+
+        #expect(
+            storedReturnedHomeVisit.endedAt
+                == nil
+        )
+
+        let events =
+            try await visitStore
+                .fetchEvents()
+
+        #expect(
+            events.count
+                == 5
+        )
+
+        #expect(
+            events.filter {
+                $0.kind == .arrived
+            }.count
+                == 3
+        )
+
+        #expect(
+            events.filter {
+                $0.kind == .departed
+            }.count
+                == 2
         )
     }
 }
