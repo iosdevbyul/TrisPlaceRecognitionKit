@@ -15,7 +15,7 @@ import TrisLocationKit
 struct PlaceVisitManagerBackgroundTests {
 
     @Test
-    func startsBackgroundRecognitionWithSingleLocationSnapshot()
+    func startsBackgroundRecognitionWithoutLocationSnapshotWhenAllPlacesFit()
         async throws {
 
         let locationProvider =
@@ -96,7 +96,7 @@ struct PlaceVisitManagerBackgroundTests {
         #expect(
             locationProvider
                 .requestCurrentLocationCallCount
-                == 1
+                == 0
         )
 
         #expect(
@@ -114,6 +114,135 @@ struct PlaceVisitManagerBackgroundTests {
         #expect(
             locationProvider
                 .requestAlwaysAuthorizationCallCount
+                == 0
+        )
+
+        await manager
+            .stopBackgroundRecognition()
+    }
+    
+    @Test
+    func backgroundStartSucceedsWhenLocationSnapshotFailsButAllPlacesFit()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        locationProvider
+            .requestCurrentLocationError =
+            PlaceVisitManagerBackgroundTestError
+                .locationUnavailable
+
+        let wifiProvider =
+            MockWiFiProvider()
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let home =
+            try makePlace(
+                name:
+                    "Home",
+                latitude:
+                    37.5665,
+                ssid:
+                    nil
+            )
+
+        let gym =
+            try makePlace(
+                name:
+                    "Gym",
+                latitude:
+                    37.5700,
+                ssid:
+                    nil
+            )
+
+        try await placeStore.save(
+            home
+        )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .gpsConstrained,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    BackgroundRecognitionPolicy(
+                        maximumMonitoredPlaces:
+                            20
+                    ),
+                backgroundMonitor:
+                    backgroundMonitor
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        #expect(
+            manager
+                .isBackgroundRecognitionEnabled
+        )
+
+        #expect(
+            backgroundMonitor
+                .synchronizedRegionBatches
+                .count == 1
+        )
+
+        let monitoredIDs =
+            Set(
+                backgroundMonitor
+                    .synchronizedRegionBatches[0]
+                    .map(
+                        \.placeID
+                    )
+            )
+
+        #expect(
+            monitoredIDs == [
+                home.id,
+                gym.id
+            ]
+        )
+
+        #expect(
+            locationProvider
+                .requestCurrentLocationCallCount
+                == 0
+        )
+
+        #expect(
+            locationProvider
+                .locationUpdatesCallCount
                 == 0
         )
 
@@ -403,15 +532,15 @@ struct PlaceVisitManagerBackgroundTests {
                 .placeID == gym.id
         )
 
-        // One location request was needed only to
-        // calculate background monitoring candidates.
+        // All registered places fit within the monitoring
+        // limit, so candidate synchronization requires no
+        // GPS snapshot.
         //
-        // Wi-Fi confirmed the arrival, so no second
-        // GPS request was required.
+        // Wi-Fi confirms the arrival without GPS.
         #expect(
             locationProvider
                 .requestCurrentLocationCallCount
-                == 1
+                == 0
         )
 
         #expect(
@@ -620,7 +749,7 @@ struct PlaceVisitManagerBackgroundTests {
         #expect(
             locationProvider
                 .requestCurrentLocationCallCount
-                == 1
+                == 0
         )
 
         #expect(
@@ -1176,13 +1305,15 @@ struct PlaceVisitManagerBackgroundTests {
                 == .departed
         )
 
-        // One snapshot is used to restore the monitored
-        // candidate set. The Wi-Fi recognition path doesn't
-        // require another GPS snapshot here.
+        // All registered places fit within the monitoring
+        // limit, so restoring the monitored candidate set
+        // requires no GPS snapshot.
+        //
+        // The Wi-Fi recognition path also requires no GPS.
         #expect(
             locationProvider
                 .requestCurrentLocationCallCount
-                == 1
+                == 0
         )
 
         #expect(
@@ -1292,7 +1423,7 @@ struct PlaceVisitManagerBackgroundTests {
         #expect(
             locationProvider
                 .requestCurrentLocationCallCount
-                == 1
+                == 0
         )
 
         #expect(
@@ -1630,12 +1761,15 @@ struct PlaceVisitManagerBackgroundTests {
                 .stopAllCallCount == 1
         )
 
-        // Authorization is checked before another
-        // location snapshot is requested.
+        // All places fit, so the initial start requires no
+        // location snapshot.
+        //
+        // Authorization is rejected on refresh before any
+        // location snapshot could be requested.
         #expect(
             locationProvider
                 .requestCurrentLocationCallCount
-                == 1
+                == 0
         )
 
         #expect(
@@ -1646,7 +1780,7 @@ struct PlaceVisitManagerBackgroundTests {
     }
     
     @Test
-    func transientLocationFailureKeepsExistingBackgroundMonitoring()
+    func transientLocationFailureKeepsExistingBackgroundMonitoringWhenCandidateSelectionNeedsLocation()
         async throws {
 
         let locationProvider =
@@ -1668,8 +1802,19 @@ struct PlaceVisitManagerBackgroundTests {
                 ssid: nil
             )
 
+        let home =
+            try makePlace(
+                name: "Home",
+                latitude: 37.5700,
+                ssid: nil
+            )
+
         try await placeStore.save(
             gym
+        )
+
+        try await placeStore.save(
+            home
         )
 
         let recognitionService =
@@ -1698,13 +1843,26 @@ struct PlaceVisitManagerBackgroundTests {
                 refreshInterval:
                     15,
                 backgroundRecognitionPolicy:
-                    .init(),
+                    BackgroundRecognitionPolicy(
+                        maximumMonitoredPlaces: 1
+                    ),
                 backgroundMonitor:
                     backgroundMonitor
             )
 
         try await manager
             .startBackgroundRecognition()
+
+        #expect(
+            manager
+                .isBackgroundRecognitionEnabled
+        )
+
+        #expect(
+            locationProvider
+                .requestCurrentLocationCallCount
+                == 1
+        )
 
         locationProvider
             .requestCurrentLocationError =
@@ -1730,7 +1888,8 @@ struct PlaceVisitManagerBackgroundTests {
                 .isBackgroundRecognitionEnabled
         )
 
-        // Existing system monitoring must remain alive.
+        // A transient candidate-selection failure must
+        // not tear down already configured system regions.
         #expect(
             backgroundMonitor
                 .stopAllCallCount == 0
