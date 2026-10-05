@@ -68,7 +68,7 @@ final class BackgroundRecognitionEventProcessor {
         _ trigger:
             BackgroundRecognitionTrigger,
         at timestamp:
-            Date = Date()
+            Date? = nil
     ) async throws
         -> BackgroundRecognitionProcessingResult {
 
@@ -92,6 +92,9 @@ final class BackgroundRecognitionEventProcessor {
 
         try Task.checkCancellation()
 
+        let observedAt =
+            timestamp ?? Date()
+
         let update =
             try await coordinator
                 .processVerifiedBackgroundObservation(
@@ -99,7 +102,7 @@ final class BackgroundRecognitionEventProcessor {
                     trigger:
                         trigger,
                     at:
-                        timestamp
+                        observedAt
                 )
 
         return BackgroundRecognitionProcessingResult(

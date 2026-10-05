@@ -583,6 +583,143 @@ struct BackgroundRecognitionEventProcessorTests {
     }
     
     @Test
+    func delayedBackgroundRecognitionUsesCompletionTimeForObservation()
+        async throws {
+
+        let locationProvider =
+            MockLocationProvider()
+
+        let wifiProvider =
+            SuspendedWiFiProvider()
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let home =
+            try makePlace(
+                name:
+                    "Home",
+                ssid:
+                    "HOME_WIFI"
+            )
+
+        try await placeStore.save(
+            home
+        )
+
+        let existingVisit =
+            try await seedActiveVisit(
+                place:
+                    home,
+                store:
+                    visitStore
+            )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let coordinator =
+            PlaceVisitCoordinator(
+                store:
+                    visitStore
+            )
+
+        _ =
+            try await coordinator.restore()
+
+        let processor =
+            BackgroundRecognitionEventProcessor(
+                recognitionService:
+                    recognitionService,
+                coordinator:
+                    coordinator,
+                recognitionPolicy:
+                    .wifiFirst
+            )
+
+        let backgroundTask =
+            Task {
+                try await processor.handle(
+                    .monitoredRegionExited(
+                        placeID:
+                            home.id
+                    )
+                )
+            }
+
+        await wifiProvider
+            .waitUntilRequestStarts()
+
+        // Simulate a newer foreground observation being
+        // processed while background recognition is still
+        // waiting for Wi-Fi.
+        _ =
+            try await coordinator
+                .processSuccessfulObservation(
+                    [
+                        RecognizedPlace(
+                            place:
+                                home,
+                            distanceMeters:
+                                nil,
+                            evidence:
+                                .ssid
+                        )
+                    ],
+                    at:
+                        Date()
+                )
+
+        await wifiProvider
+            .resume(
+                with:
+                    nil
+            )
+
+        let result =
+            try await backgroundTask.value
+
+        #expect(
+            result
+                .endedVisits
+                .count
+                == 1
+        )
+
+        #expect(
+            result
+                .endedVisits
+                .first?
+                .id
+                == existingVisit.id
+        )
+
+        #expect(
+            result
+                .events
+                .first?
+                .kind
+                == .departed
+        )
+
+        #expect(
+            try await coordinator
+                .activeVisits()
+                .isEmpty
+        )
+    }
+    
+    @Test
     func backgroundRoundTripPersistsHomeGymHomeVisitHistory()
         async throws {
 
@@ -967,4 +1104,79 @@ private enum
     Error {
 
     case locationUnavailable
+}
+
+private actor SuspendedWiFiProvider:
+    WiFiProviding {
+
+    private var continuation:
+        CheckedContinuation<
+            WiFiNetwork?,
+            Never
+        >?
+
+    private var requestStarted = false
+
+    private var waiters:
+        [
+            CheckedContinuation<
+                Void,
+                Never
+            >
+        ] = []
+
+    func currentNetwork()
+        async
+        -> WiFiNetwork? {
+
+        requestStarted =
+            true
+
+        let currentWaiters =
+            waiters
+
+        waiters.removeAll()
+
+        for waiter in currentWaiters {
+            waiter.resume()
+        }
+
+        return await withCheckedContinuation {
+            continuation in
+
+            self.continuation =
+                continuation
+        }
+    }
+
+    func waitUntilRequestStarts()
+        async {
+
+        if requestStarted {
+            return
+        }
+
+        await withCheckedContinuation {
+            continuation in
+
+            waiters.append(
+                continuation
+            )
+        }
+    }
+
+    func resume(
+        with network:
+            WiFiNetwork?
+    ) {
+
+        continuation?
+            .resume(
+                returning:
+                    network
+            )
+
+        continuation =
+            nil
+    }
 }
