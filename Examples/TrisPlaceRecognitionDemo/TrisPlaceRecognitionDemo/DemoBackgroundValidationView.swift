@@ -9,6 +9,7 @@ import CoreLocation
 import SwiftUI
 import TrisLocationKit
 import TrisPlaceRecognitionKit
+import UIKit
 
 @MainActor
 struct DemoBackgroundValidationView: View {
@@ -59,6 +60,10 @@ struct DemoBackgroundValidationView: View {
         backgroundRegionIdentifierPrefix =
             "TrisPlaceRecognitionKit.background.place."
 
+    @State
+    private var exportedDiagnosticLog:
+        ExportedDiagnosticLog?
+    
     init(
         environment:
             DemoEnvironment,
@@ -104,6 +109,7 @@ struct DemoBackgroundValidationView: View {
                 controlSection
 
                 validationGuideSection
+                
             }
             .navigationTitle(
                 "실기기 검증"
@@ -163,6 +169,17 @@ struct DemoBackgroundValidationView: View {
 
                 await refreshSnapshot()
             }
+        }
+        .sheet(
+            item:
+                $exportedDiagnosticLog
+        ) { exportedLog in
+
+            ActivityView(
+                activityItems: [
+                    exportedLog.url
+                ]
+            )
         }
     }
 }
@@ -629,6 +646,20 @@ private extension DemoBackgroundValidationView {
                 diagnosticEvents
                     .isEmpty
             )
+            
+            Button(
+                "전체 진단 로그 내보내기"
+            ) {
+
+                Task {
+
+                    await exportDiagnosticLog()
+                }
+            }
+            .disabled(
+                diagnosticEvents
+                    .isEmpty
+            )
         }
     }
 
@@ -756,6 +787,110 @@ private extension DemoBackgroundValidationView {
 
 private extension DemoBackgroundValidationView {
 
+    func exportDiagnosticLog()
+        async {
+
+        localErrorMessage =
+            nil
+
+        do {
+
+            let events =
+                try await visitManager
+                    .fetchDiagnosticEvents()
+
+            guard
+                !events.isEmpty
+            else {
+
+                localErrorMessage =
+                    "내보낼 진단 로그가 없습니다."
+
+                return
+            }
+
+            let encoder =
+                JSONEncoder()
+
+            encoder.dateEncodingStrategy =
+                .iso8601
+
+            encoder.outputFormatting = [
+                .sortedKeys
+            ]
+
+            let lines =
+                try events.map { event in
+
+                    let data =
+                        try encoder.encode(
+                            event
+                        )
+
+                    guard
+                        let line =
+                            String(
+                                data:
+                                    data,
+                                encoding:
+                                    .utf8
+                            )
+                    else {
+
+                        throw CocoaError(
+                            .fileWriteInapplicableStringEncoding
+                        )
+                    }
+
+                    return line
+                }
+
+            let text =
+                lines.joined(
+                    separator:
+                        "\n"
+                )
+                + "\n"
+
+            let formatter =
+                DateFormatter()
+
+            formatter.dateFormat =
+                "yyyy-MM-dd_HH-mm-ss"
+
+            let fileName =
+                "place-visit-diagnostics-\(formatter.string(from: Date())).jsonl"
+
+            let fileURL =
+                FileManager.default
+                    .temporaryDirectory
+                    .appendingPathComponent(
+                        fileName
+                    )
+
+            try Data(
+                text.utf8
+            )
+            .write(
+                to:
+                    fileURL,
+                options:
+                    .atomic
+            )
+
+            exportedDiagnosticLog =
+                ExportedDiagnosticLog(
+                    url:
+                        fileURL
+                )
+
+        } catch {
+
+            localErrorMessage =
+                error.localizedDescription
+        }
+    }
+    
     func refreshSnapshot()
         async {
 
@@ -1195,5 +1330,43 @@ private extension DemoBackgroundValidationView {
 
         return
             "\(totalMinutes)분"
+    }
+    
+    private struct ExportedDiagnosticLog:
+        Identifiable {
+
+        let id =
+            UUID()
+
+        let url:
+            URL
+    }
+
+    private struct ActivityView:
+        UIViewControllerRepresentable {
+
+        let activityItems:
+            [Any]
+
+        func makeUIViewController(
+            context:
+                Context
+        ) -> UIActivityViewController {
+
+            UIActivityViewController(
+                activityItems:
+                    activityItems,
+                applicationActivities:
+                    nil
+            )
+        }
+
+        func updateUIViewController(
+            _ uiViewController:
+                UIActivityViewController,
+            context:
+                Context
+        ) {
+        }
     }
 }
