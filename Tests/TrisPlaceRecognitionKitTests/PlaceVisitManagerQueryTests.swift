@@ -118,17 +118,17 @@ struct PlaceVisitManagerQueryTests {
             endedAt: time(150)
         )
 
-        let active = try await saveActiveVisit(
-            to: store,
-            placeID: UUID(),
-            startedAt: time(190)
-        )
-
         let after = try await saveCompletedVisit(
             to: store,
             placeID: UUID(),
             startedAt: time(210),
             endedAt: time(240)
+        )
+
+        let active = try await saveActiveVisit(
+            to: store,
+            placeID: UUID(),
+            startedAt: time(190)
         )
 
         let manager = makeManager(

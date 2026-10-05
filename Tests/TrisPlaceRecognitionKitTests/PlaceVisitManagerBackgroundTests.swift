@@ -634,6 +634,109 @@ struct PlaceVisitManagerBackgroundTests {
     }
     
     @Test
+    func keepsSignificantLocationMonitoringEnabledWhileVisitIsActive()
+        async throws {
+
+        let locationProvider =
+            makeAuthorizedLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider()
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let home =
+            try makePlace(
+                name:
+                    "Home",
+                latitude:
+                    37.5665,
+                ssid:
+                    nil
+            )
+
+        try await placeStore.save(
+            home
+        )
+
+        _ =
+            try await seedActiveVisit(
+                place:
+                    home,
+                store:
+                    visitStore
+            )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let backgroundMonitor =
+            TestBackgroundRegionMonitor()
+
+        let manager =
+            PlaceVisitManager(
+                recognitionService:
+                    recognitionService,
+                visitStore:
+                    visitStore,
+                recognitionPolicy:
+                    .gpsConstrained,
+                visitPolicy:
+                    .init(),
+                refreshInterval:
+                    15,
+                backgroundRecognitionPolicy:
+                    BackgroundRecognitionPolicy(
+                        maximumMonitoredPlaces:
+                            20
+                    ),
+                backgroundMonitor:
+                    backgroundMonitor
+            )
+
+        try await manager
+            .startBackgroundRecognition()
+
+        #expect(
+            manager.activeVisits.count
+                == 1
+        )
+
+        #expect(
+            manager.activeVisits.first?.placeID
+                == home.id
+        )
+
+        #expect(
+            backgroundMonitor
+                .candidateRefreshMonitoringValues
+                == [
+                    true
+                ]
+        )
+
+        #expect(
+            locationProvider
+                .locationUpdatesCallCount
+                == 0
+        )
+
+        await manager
+            .stopBackgroundRecognition()
+    }
+    
+    @Test
     func enablesCandidateRefreshWhenPlacesExceedLimit()
         async throws {
 

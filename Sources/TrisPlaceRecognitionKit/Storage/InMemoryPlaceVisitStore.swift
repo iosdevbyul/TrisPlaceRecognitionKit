@@ -24,37 +24,6 @@ public actor InMemoryPlaceVisitStore: PlaceVisitStoring {
 
         var expectedEvents: [VisitEventKey: Date] = [:]
 
-        // MARK: - Start Visits
-
-        for record in update.startedVisits {
-
-            guard record.endedAt == nil,
-                  record.startedAt.timeIntervalSince1970.isFinite else {
-                throw PlaceVisitStorageError.invalidVisitRecord
-            }
-
-            guard nextVisits[record.id] == nil else {
-                throw PlaceVisitStorageError.duplicateVisit
-            }
-
-            let hasActiveVisit = nextVisits.values.contains {
-                $0.placeID == record.placeID && $0.isActive
-            }
-
-            guard !hasActiveVisit else {
-                throw PlaceVisitStorageError.activeVisitAlreadyExists
-            }
-
-            nextVisits[record.id] = record
-
-            expectedEvents[
-                VisitEventKey(
-                    visitID: record.id,
-                    kind: .arrived
-                )
-            ] = record.startedAt
-        }
-
         // MARK: - End Visits
 
         for record in update.endedVisits {
@@ -84,6 +53,39 @@ public actor InMemoryPlaceVisitStore: PlaceVisitStoring {
                     kind: .departed
                 )
             ] = endedAt
+        }
+        
+        // MARK: - Start Visits
+
+        for record in update.startedVisits {
+
+            guard record.endedAt == nil,
+                  record.startedAt.timeIntervalSince1970.isFinite else {
+                throw PlaceVisitStorageError.invalidVisitRecord
+            }
+
+            guard nextVisits[record.id] == nil else {
+                throw PlaceVisitStorageError.duplicateVisit
+            }
+
+            let hasActiveVisit =
+                nextVisits.values.contains {
+                    $0.isActive
+                }
+
+            guard !hasActiveVisit else {
+                throw PlaceVisitStorageError
+                    .activeVisitAlreadyExists
+            }
+
+            nextVisits[record.id] = record
+
+            expectedEvents[
+                VisitEventKey(
+                    visitID: record.id,
+                    kind: .arrived
+                )
+            ] = record.startedAt
         }
 
         // MARK: - Validate Events
