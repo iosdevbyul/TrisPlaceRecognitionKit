@@ -808,62 +808,96 @@ private extension PlaceVisitManager {
             throw error
         }
 
-        guard
-            let currentLocation =
-                try await recognitionService
-                    .requestBackgroundMonitoringLocation()
-        else {
+            let candidates: [BackgroundMonitoringCandidate]
 
-            await recordDiagnostic(
-                category:
-                    .error,
-                name:
-                    "region.sync.locationSnapshotRejected"
-            )
+            if places.count
+                <= backgroundRecognitionPolicy
+                    .maximumMonitoredPlaces {
 
-            throw BackgroundRecognitionManagerError
-                .unacceptableLocationSnapshot
-        }
+                candidates =
+                    places.map {
+                        BackgroundMonitoringCandidate(
+                            place:
+                                $0,
+                            distanceMeters:
+                                0
+                        )
+                    }
 
-        await recordDiagnostic(
-            category:
-                .regionSync,
-            name:
-                "region.sync.locationSnapshot",
-            metadata: [
-                "horizontalAccuracy":
-                    String(
-                        format:
-                            "%.1f",
-                        currentLocation
-                            .horizontalAccuracy
+                await recordDiagnostic(
+                    category:
+                        .regionSync,
+                    name:
+                        "region.sync.locationSnapshotSkipped",
+                    metadata: [
+                        "reason":
+                            "allPlacesFit",
+                        "registeredCount":
+                            "\(places.count)",
+                        "maximumMonitoredPlaces":
+                            "\(backgroundRecognitionPolicy.maximumMonitoredPlaces)"
+                    ]
+                )
+
+            } else {
+
+                guard
+                    let currentLocation =
+                        try await recognitionService
+                            .requestBackgroundMonitoringLocation()
+                else {
+
+                    await recordDiagnostic(
+                        category:
+                            .error,
+                        name:
+                            "region.sync.locationSnapshotRejected"
                     )
-            ]
-        )
 
-        let prioritizedPlaceIDs =
-            Set(
-                activeVisits.map(
-                    \.placeID
-                )
-            )
+                    throw BackgroundRecognitionManagerError
+                        .unacceptableLocationSnapshot
+                }
 
-        let candidates =
-            BackgroundMonitoringCandidateSelector
-                .select(
-                    from:
-                        places,
-                    currentLatitude:
-                        currentLocation
-                            .latitude,
-                    currentLongitude:
-                        currentLocation
-                            .longitude,
-                    prioritizedPlaceIDs:
-                        prioritizedPlaceIDs,
-                    policy:
-                        backgroundRecognitionPolicy
+                await recordDiagnostic(
+                    category:
+                        .regionSync,
+                    name:
+                        "region.sync.locationSnapshot",
+                    metadata: [
+                        "horizontalAccuracy":
+                            String(
+                                format:
+                                    "%.1f",
+                                currentLocation
+                                    .horizontalAccuracy
+                            )
+                    ]
                 )
+
+                let prioritizedPlaceIDs =
+                    Set(
+                        activeVisits.map(
+                            \.placeID
+                        )
+                    )
+
+                candidates =
+                    BackgroundMonitoringCandidateSelector
+                        .select(
+                            from:
+                                places,
+                            currentLatitude:
+                                currentLocation
+                                    .latitude,
+                            currentLongitude:
+                                currentLocation
+                                    .longitude,
+                            prioritizedPlaceIDs:
+                                prioritizedPlaceIDs,
+                            policy:
+                                backgroundRecognitionPolicy
+                        )
+            }
 
         await recordDiagnostic(
             category:
@@ -888,10 +922,10 @@ private extension PlaceVisitManager {
             ]
         )
 
-            let requiresCandidateRefresh =
-                places.count
-                    > candidates.count
-                    || !activeVisits.isEmpty
+        let requiresCandidateRefresh =
+            places.count
+                > candidates.count
+                || !activeVisits.isEmpty
 
         do {
 
