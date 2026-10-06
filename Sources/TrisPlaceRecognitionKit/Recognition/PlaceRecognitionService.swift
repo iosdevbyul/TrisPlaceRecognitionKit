@@ -119,6 +119,29 @@ public final class PlaceRecognitionService {
         try await placeStore.fetchAll()
     }
 
+    func currentWiFiEvidence(
+        for place: RegisteredPlace
+    ) async -> PlaceRecognitionEvidence? {
+        let currentWiFi =
+            await wifiProvider.currentNetwork()
+
+        switch PlaceWiFiMatcher.match(
+            registered: place.networkIdentities,
+            current: currentWiFi
+        ) {
+        case .bssid:
+            return .bssid
+
+        case .ssid:
+            return .ssid
+
+        case .mismatch,
+             .unavailable,
+             .notConfigured:
+            return nil
+        }
+    }
+
     func requestBackgroundMonitoringLocation()
         async throws -> LocationPoint? {
 
