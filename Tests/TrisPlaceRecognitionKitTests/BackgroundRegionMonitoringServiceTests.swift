@@ -67,12 +67,12 @@ struct BackgroundRegionMonitoringServiceTests {
 
         #expect(
             regions[0].latitude
-                == gym.place.location.latitude
+                == gym.place.location?.latitude
         )
 
         #expect(
             regions[0].longitude
-                == gym.place.location.longitude
+                == gym.place.location?.longitude
         )
 
         #expect(
