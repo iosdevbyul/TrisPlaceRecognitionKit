@@ -286,7 +286,9 @@ private extension PlaceListView {
                 )
 
                 Text(
-                    "인식 반경: \(Int(place.location.recognitionRadius))m"
+                    place.location.map {
+                        "인식 반경: \(Int($0.recognitionRadius))m"
+                    } ?? "GPS 위치 미등록"
                 )
                 .font(
                     .caption
