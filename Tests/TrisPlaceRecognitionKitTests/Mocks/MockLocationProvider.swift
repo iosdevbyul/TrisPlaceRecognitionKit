@@ -20,6 +20,8 @@ final class MockLocationProvider: LocationProviding {
     var requestCurrentLocationError:
         Error?
 
+    var refreshTimestampOnRequest = true
+
     private(set)
     var requestCurrentLocationCallCount = 0
 
@@ -57,7 +59,22 @@ final class MockLocationProvider: LocationProviding {
                 .locationUnavailable
         }
 
-        return locationPoint
+        guard refreshTimestampOnRequest else {
+            return locationPoint
+        }
+
+        return LocationPoint(
+            latitude: locationPoint.latitude,
+            longitude: locationPoint.longitude,
+            altitude: locationPoint.altitude,
+            horizontalAccuracy:
+                locationPoint.horizontalAccuracy,
+            verticalAccuracy:
+                locationPoint.verticalAccuracy,
+            speed: locationPoint.speed,
+            course: locationPoint.course,
+            timestamp: Date()
+        )
     }
 
     func locationUpdates()
