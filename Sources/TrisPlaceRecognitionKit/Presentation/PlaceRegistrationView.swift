@@ -165,14 +165,16 @@ private extension PlaceRegistrationView {
 
                     detailRow(
                         "인식 반경",
-                        value: "\(Int(candidate.location.recognitionRadius))m"
+                        value: candidate.location.map {
+                            "\(Int($0.recognitionRadius))m"
+                        } ?? "GPS 위치 미등록"
                     )
 
                     detailRow(
                         "위도",
                         value: String(
                             format: "%.5f",
-                            candidate.location.latitude
+                            candidate.location?.latitude ?? 0
                         )
                     )
 
@@ -180,7 +182,7 @@ private extension PlaceRegistrationView {
                         "경도",
                         value: String(
                             format: "%.5f",
-                            candidate.location.longitude
+                            candidate.location?.longitude ?? 0
                         )
                     )
                 }
