@@ -861,10 +861,14 @@ private extension PlaceVisitManager {
                     .maximumMonitoredPlaces {
 
                 candidates =
-                    places.map {
-                        BackgroundMonitoringCandidate(
+                    places.compactMap { place in
+                        guard place.location != nil else {
+                            return nil
+                        }
+
+                        return BackgroundMonitoringCandidate(
                             place:
-                                $0,
+                                place,
                             distanceMeters:
                                 0
                         )
