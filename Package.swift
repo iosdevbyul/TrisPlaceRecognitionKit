@@ -19,6 +19,10 @@ let package = Package(
         .package(
             url: "https://github.com/iosdevbyul/TrisLocationKit",
             branch: "main"
+        ),
+        .package(
+            url: "https://github.com/iosdevbyul/TrisNotificationKit",
+            branch: "main"
         )
     ],
     targets: [
@@ -28,6 +32,10 @@ let package = Package(
                 .product(
                     name: "TrisLocationKit",
                     package: "TrisLocationKit"
+                ),
+                .product(
+                    name: "TrisNotificationKit",
+                    package: "TrisNotificationKit"
                 )
             ]
         ),
