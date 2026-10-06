@@ -22,18 +22,16 @@ struct BackgroundMonitoredRegion:
         placeID
     }
 
-    init(
+    init?(
         candidate: BackgroundMonitoringCandidate
     ) {
+        guard let location = candidate.place.location else {
+            return nil
+        }
+
         placeID = candidate.place.id
-
-        latitude =
-            candidate.place.location.latitude
-
-        longitude =
-            candidate.place.location.longitude
-
-        radius =
-            candidate.place.location.recognitionRadius
+        latitude = location.latitude
+        longitude = location.longitude
+        radius = location.recognitionRadius
     }
 }
