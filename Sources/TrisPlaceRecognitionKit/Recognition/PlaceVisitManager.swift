@@ -83,7 +83,7 @@ public final class PlaceVisitManager: ObservableObject {
         visitStore:
             any PlaceVisitStoring,
         recognitionPolicy:
-            PlaceRecognitionPolicy = .gpsConstrained,
+            PlaceRecognitionPolicy = .wifiOrGPS,
         visitPolicy:
             PlaceVisitPolicy = .init(),
         refreshInterval:
@@ -233,7 +233,7 @@ public final class PlaceVisitManager: ObservableObject {
         recognitionService:
             PlaceRecognitionService,
         recognitionPolicy:
-            PlaceRecognitionPolicy = .gpsConstrained,
+            PlaceRecognitionPolicy = .wifiOrGPS,
         visitPolicy:
             PlaceVisitPolicy = .init(),
         refreshInterval:
