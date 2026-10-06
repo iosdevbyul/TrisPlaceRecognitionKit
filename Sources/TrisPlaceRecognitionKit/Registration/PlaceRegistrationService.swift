@@ -27,6 +27,83 @@ public final class PlaceRegistrationService {
         self.placeStore = placeStore
     }
 
+
+    /// Registers the current place from every signal that is
+    /// available without asking the caller to choose a method.
+    ///
+    /// GPS and Wi-Fi are collected independently. Registration
+    /// succeeds when at least one signal is available.
+    public func registerLocation(
+        name: String = "Place"
+    ) async throws -> RegisteredPlace {
+        let placeName = try PlaceName(name)
+
+        async let currentNetwork =
+            wifiProvider.currentNetwork()
+
+        let locationPoint =
+            try? await locationProvider
+                .requestCurrentLocation()
+
+        let network =
+            await currentNetwork
+
+        let hasWiFi =
+            network.map {
+                !$0.ssid
+                    .trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                    .isEmpty
+            } ?? false
+
+        guard
+            locationPoint != nil
+                || hasWiFi
+        else {
+            throw PlaceRegistrationError
+                .noAvailableSignal
+        }
+
+        let location =
+            locationPoint.map {
+                PlaceLocation(
+                    latitude: $0.latitude,
+                    longitude: $0.longitude,
+                    recognitionRadius:
+                        Self.defaultRecognitionRadius
+                )
+            }
+
+        let networkIdentity =
+            PlaceNetworkIdentity(
+                ssid:
+                    hasWiFi
+                    ? network?.ssid
+                    : nil,
+                bssid:
+                    hasWiFi
+                    ? network?.bssid
+                    : nil
+            )
+
+        let place =
+            RegisteredPlace(
+                name:
+                    placeName,
+                location:
+                    location,
+                networkIdentity:
+                    networkIdentity
+            )
+
+        try await placeStore.save(
+            place
+        )
+
+        return place
+    }
+
     // Creates a candidate without saving it.
     // The caller can inspect duplicate warnings first.
     public func prepareRegistration(
