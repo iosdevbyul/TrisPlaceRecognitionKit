@@ -17,9 +17,9 @@ final class SwiftDataPlaceModel {
 
     var name: String
 
-    var latitude: Double
-    var longitude: Double
-    var recognitionRadius: Double
+    var latitude: Double?
+    var longitude: Double?
+    var recognitionRadius: Double?
 
     var ssid: String?
     var bssid: String?
@@ -28,9 +28,9 @@ final class SwiftDataPlaceModel {
     init(
         id: UUID,
         name: String,
-        latitude: Double,
-        longitude: Double,
-        recognitionRadius: Double,
+        latitude: Double?,
+        longitude: Double?,
+        recognitionRadius: Double?,
         ssid: String?,
         bssid: String?,
         additionalNetworksData: Data? = nil

@@ -32,7 +32,7 @@ struct PlaceDetailViewModelTests {
         await viewModel.updateRadius()
 
         #expect(
-            viewModel.place.location.recognitionRadius == 200
+            viewModel.place.location?.recognitionRadius == 200
         )
 
         #expect(
@@ -90,11 +90,11 @@ struct PlaceDetailViewModelTests {
 
         await viewModel.updateCurrentLocation()
 
-        #expect(viewModel.place.location.latitude == 37.5700)
-        #expect(viewModel.place.location.longitude == 127.0000)
+        #expect(viewModel.place.location?.latitude == 37.5700)
+        #expect(viewModel.place.location?.longitude == 127.0000)
 
         #expect(
-            viewModel.place.location.recognitionRadius == 100
+            viewModel.place.location?.recognitionRadius == 100
         )
 
         #expect(
@@ -237,7 +237,7 @@ private extension PlaceDetailViewModelTests {
 
         await viewModel.updateRadius()
 
-        #expect(viewModel.place.location.recognitionRadius == 150)
+        #expect(viewModel.place.location?.recognitionRadius == 150)
         #expect(viewModel.duplicateWarnings.count == 1)
 
         #expect(

@@ -51,9 +51,13 @@ public final class PlaceManagementService {
         }
 
         return try await updateExisting(id: id) { place in
+            guard let currentLocation = place.location else {
+                throw PlaceManagementError.invalidCurrentLocation
+            }
+
             let location = PlaceLocation(
-                latitude: place.location.latitude,
-                longitude: place.location.longitude,
+                latitude: currentLocation.latitude,
+                longitude: currentLocation.longitude,
                 recognitionRadius: radius
             )
 
@@ -90,14 +94,19 @@ public final class PlaceManagementService {
         let accuracy = current.horizontalAccuracy
 
         return try await updateExisting(id: id) { place in
-            guard accuracy <= place.location.recognitionRadius else {
+            let radius =
+                place.location?.recognitionRadius
+                ?? PlaceRegistrationService.defaultRecognitionRadius
+
+            if place.location != nil,
+               accuracy > radius {
                 throw PlaceManagementError.invalidCurrentLocation
             }
 
             let location = PlaceLocation(
                 latitude: latitude,
                 longitude: longitude,
-                recognitionRadius: place.location.recognitionRadius
+                recognitionRadius: radius
             )
 
             return RegisteredPlace(

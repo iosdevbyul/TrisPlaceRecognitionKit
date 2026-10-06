@@ -189,6 +189,9 @@ private extension PlaceRegistrationViewModel {
 
             case .currentWiFiUnavailable:
                 return "현재 연결된 Wi-Fi를 확인할 수 없습니다."
+
+            case .noAvailableSignal:
+                return "현재 위치 또는 Wi-Fi 정보를 확인할 수 없습니다."
             }
         }
 

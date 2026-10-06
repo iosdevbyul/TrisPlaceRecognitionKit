@@ -55,12 +55,12 @@ struct PlaceManagementServiceTests {
         )
 
         #expect(updated.id == original.id)
-        #expect(updated.location.recognitionRadius == 200)
+        #expect(updated.location?.recognitionRadius == 200)
         #expect(
-            updated.location.latitude == original.location.latitude
+            updated.location?.latitude == original.location?.latitude
         )
         #expect(
-            updated.location.longitude == original.location.longitude
+            updated.location?.longitude == original.location?.longitude
         )
         #expect(
             updated.networkIdentities == original.networkIdentities
@@ -116,12 +116,12 @@ struct PlaceManagementServiceTests {
             for: original.id
         )
 
-        #expect(updated.location.latitude == 37.5700)
-        #expect(updated.location.longitude == 127.0000)
+        #expect(updated.location?.latitude == 37.5700)
+        #expect(updated.location?.longitude == 127.0000)
 
         #expect(
-            updated.location.recognitionRadius
-                == original.location.recognitionRadius
+            updated.location?.recognitionRadius
+                == original.location?.recognitionRadius
         )
 
         #expect(

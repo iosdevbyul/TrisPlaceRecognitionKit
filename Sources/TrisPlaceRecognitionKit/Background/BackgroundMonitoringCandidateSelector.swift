@@ -20,11 +20,15 @@ enum BackgroundMonitoringCandidateSelector {
         let candidates = places.compactMap { place
             -> BackgroundMonitoringCandidate? in
 
+            guard let location = place.location else {
+                return nil
+            }
+
             guard let distance =
                     PlaceProximityMatcher.distanceMeters(
                         latitude: currentLatitude,
                         longitude: currentLongitude,
-                        from: place.location
+                        from: location
                     ) else {
                 return nil
             }

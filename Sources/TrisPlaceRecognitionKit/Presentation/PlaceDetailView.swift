@@ -284,8 +284,9 @@ private extension PlaceDetailView {
             }
 
             Text(
-                "현재 저장된 반경: " +
-                "\(Int(viewModel.place.location.recognitionRadius))m"
+                viewModel.place.location.map {
+                    "현재 저장된 반경: \(Int($0.recognitionRadius))m"
+                } ?? "GPS 위치가 아직 등록되지 않았습니다."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -301,21 +302,26 @@ private extension PlaceDetailView {
 
     var locationSection: some View {
         Section("등록된 위치") {
-            detailRow(
-                "위도",
-                value: String(
-                    format: "%.5f",
-                    viewModel.place.location.latitude
+            if let location = viewModel.place.location {
+                detailRow(
+                    "위도",
+                    value: String(
+                        format: "%.5f",
+                        location.latitude
+                    )
                 )
-            )
 
-            detailRow(
-                "경도",
-                value: String(
-                    format: "%.5f",
-                    viewModel.place.location.longitude
+                detailRow(
+                    "경도",
+                    value: String(
+                        format: "%.5f",
+                        location.longitude
+                    )
                 )
-            )
+            } else {
+                Text("GPS 위치가 아직 등록되지 않았습니다.")
+                    .foregroundStyle(.secondary)
+            }
 
             Button("현재 위치로 변경") {
                 Task {

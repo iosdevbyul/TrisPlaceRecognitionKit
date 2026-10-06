@@ -83,7 +83,7 @@ public final class PlaceVisitManager: ObservableObject {
         visitStore:
             any PlaceVisitStoring,
         recognitionPolicy:
-            PlaceRecognitionPolicy = .gpsConstrained,
+            PlaceRecognitionPolicy = .wifiOrGPS,
         visitPolicy:
             PlaceVisitPolicy = .init(),
         refreshInterval:
@@ -233,7 +233,7 @@ public final class PlaceVisitManager: ObservableObject {
         recognitionService:
             PlaceRecognitionService,
         recognitionPolicy:
-            PlaceRecognitionPolicy = .gpsConstrained,
+            PlaceRecognitionPolicy = .wifiOrGPS,
         visitPolicy:
             PlaceVisitPolicy = .init(),
         refreshInterval:
@@ -861,10 +861,14 @@ private extension PlaceVisitManager {
                     .maximumMonitoredPlaces {
 
                 candidates =
-                    places.map {
-                        BackgroundMonitoringCandidate(
+                    places.compactMap { place in
+                        guard place.location != nil else {
+                            return nil
+                        }
+
+                        return BackgroundMonitoringCandidate(
                             place:
-                                $0,
+                                place,
                             distanceMeters:
                                 0
                         )

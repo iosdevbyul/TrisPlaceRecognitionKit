@@ -51,16 +51,19 @@ public final class PlaceRecognitionService {
 
         let recognizedPlaces = places.compactMap { place
             -> RecognizedPlace? in
+            guard let location = place.location else {
+                return nil
+            }
             guard currentLocation.horizontalAccuracy
-                    <= place.location.recognitionRadius else {
+                    <= location.recognitionRadius else {
                 return nil
             }
             guard let distance = PlaceProximityMatcher.distanceMeters(
                 latitude: currentLocation.latitude,
                 longitude: currentLocation.longitude,
-                from: place.location
+                from: location
             ),
-            distance <= place.location.recognitionRadius else {
+            distance <= location.recognitionRadius else {
                 return nil
             }
 
@@ -116,6 +119,29 @@ public final class PlaceRecognitionService {
         try await placeStore.fetchAll()
     }
 
+    func currentWiFiEvidence(
+        for place: RegisteredPlace
+    ) async -> PlaceRecognitionEvidence? {
+        let currentWiFi =
+            await wifiProvider.currentNetwork()
+
+        switch PlaceWiFiMatcher.match(
+            registered: place.networkIdentities,
+            current: currentWiFi
+        ) {
+        case .bssid:
+            return .bssid
+
+        case .ssid:
+            return .ssid
+
+        case .mismatch,
+             .unavailable,
+             .notConfigured:
+            return nil
+        }
+    }
+
     func requestBackgroundMonitoringLocation()
         async throws -> LocationPoint? {
 
@@ -145,6 +171,9 @@ public final class PlaceRecognitionService {
 
         case .wifiFirst:
             return try await recognizeWiFiFirstPlaces()
+
+        case .wifiOrGPS:
+            return try await recognizeWiFiOrGPSPlaces()
         }
     }
 }
@@ -206,6 +235,7 @@ private extension PlaceRecognitionService {
         // GPS is only used for places registered without Wi-Fi.
         let gpsOnlyPlaces = places.filter { place in
             place.networkIdentities.isEmpty
+                && place.location != nil
         }
 
         guard !gpsOnlyPlaces.isEmpty else {
@@ -224,16 +254,19 @@ private extension PlaceRecognitionService {
 
         let gpsMatches = gpsOnlyPlaces.compactMap { place
             -> RecognizedPlace? in
+            guard let location = place.location else {
+                return nil
+            }
             guard currentLocation.horizontalAccuracy
-                    <= place.location.recognitionRadius else {
+                    <= location.recognitionRadius else {
                 return nil
             }
             guard let distance = PlaceProximityMatcher.distanceMeters(
                 latitude: currentLocation.latitude,
                 longitude: currentLocation.longitude,
-                from: place.location
+                from: location
             ),
-            distance <= place.location.recognitionRadius else {
+            distance <= location.recognitionRadius else {
                 return nil
             }
 
@@ -245,6 +278,144 @@ private extension PlaceRecognitionService {
         }
 
         return sorted(gpsMatches)
+    }
+
+    func recognizeWiFiOrGPSPlaces() async throws -> [RecognizedPlace] {
+        var places = try await placeStore.fetchAll()
+
+        guard !places.isEmpty else {
+            return []
+        }
+
+        let currentWiFi = await wifiProvider.currentNetwork()
+
+        let locationPoint =
+            try? await locationProvider
+                .requestCurrentLocation()
+
+        let currentLocation =
+            locationPoint.flatMap { point in
+                PlaceLocationQualityValidator.isAcceptable(
+                    point,
+                    policy: locationQualityPolicy
+                )
+                ? point
+                : nil
+            }
+
+        // Wi-Fi-only registrations are enriched silently
+        // once the same Wi-Fi and an acceptable GPS fix
+        // become available together.
+        if let currentLocation {
+            for index in places.indices where places[index].location == nil {
+                let match = PlaceWiFiMatcher.match(
+                    registered: places[index].networkIdentities,
+                    current: currentWiFi
+                )
+
+                guard match == .bssid || match == .ssid else {
+                    continue
+                }
+
+                let enriched =
+                    RegisteredPlace(
+                        id: places[index].id,
+                        name: places[index].name,
+                        location:
+                            PlaceLocation(
+                                latitude:
+                                    currentLocation.latitude,
+                                longitude:
+                                    currentLocation.longitude,
+                                recognitionRadius:
+                                    PlaceRegistrationService
+                                        .defaultRecognitionRadius
+                            ),
+                        networkIdentity:
+                            places[index].networkIdentity,
+                        additionalNetworkIdentities:
+                            places[index]
+                                .additionalNetworkIdentities
+                    )
+
+                try await placeStore.save(
+                    enriched
+                )
+
+                places[index] = enriched
+            }
+        }
+
+        let recognized = places.compactMap { place
+            -> RecognizedPlace? in
+
+            let wiFiMatch =
+                PlaceWiFiMatcher.match(
+                    registered:
+                        place.networkIdentities,
+                    current:
+                        currentWiFi
+                )
+
+            let wiFiEvidence:
+                PlaceRecognitionEvidence?
+
+            switch wiFiMatch {
+            case .bssid:
+                wiFiEvidence = .bssid
+            case .ssid:
+                wiFiEvidence = .ssid
+            case .mismatch,
+                 .unavailable,
+                 .notConfigured:
+                wiFiEvidence = nil
+            }
+
+            var gpsDistance: Double?
+
+            if let currentLocation,
+               let location = place.location,
+               currentLocation.horizontalAccuracy
+                    <= location.recognitionRadius,
+               let distance =
+                    PlaceProximityMatcher.distanceMeters(
+                        latitude:
+                            currentLocation.latitude,
+                        longitude:
+                            currentLocation.longitude,
+                        from:
+                            location
+                    ),
+               distance <= location.recognitionRadius {
+
+                gpsDistance = distance
+            }
+
+            if let wiFiEvidence {
+                return RecognizedPlace(
+                    place: place,
+                    distanceMeters: gpsDistance,
+                    evidence: wiFiEvidence
+                )
+            }
+
+            if let gpsDistance {
+                return RecognizedPlace(
+                    place: place,
+                    distanceMeters: gpsDistance,
+                    evidence:
+                        place.networkIdentities.isEmpty
+                        ? .gpsOnlyNoWiFiConfigured
+                        : .gpsOnlyWiFiUnavailable
+                )
+            }
+
+            return nil
+        }
+
+        return sorted(
+            recognized
+        )
     }
 
     func sorted(

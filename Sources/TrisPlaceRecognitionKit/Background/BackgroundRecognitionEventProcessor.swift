@@ -133,12 +133,43 @@ final class BackgroundRecognitionEventProcessor {
                     update
             )
 
-        case .monitoredRegionExited:
+        case .monitoredRegionExited(
+            let placeID
+        ):
+
+            let registeredPlaces =
+                try await recognitionService
+                    .fetchRegisteredPlacesForBackgroundMonitoring()
+
+            let place =
+                registeredPlaces.first {
+                    $0.id == placeID
+                }
+
+            var recognizedPlaces:
+                [RecognizedPlace] = []
+
+            if let place,
+               !place.networkIdentities.isEmpty,
+               let evidence =
+                    await recognitionService
+                        .currentWiFiEvidence(
+                            for: place
+                        ) {
+
+                recognizedPlaces = [
+                    RecognizedPlace(
+                        place: place,
+                        distanceMeters: nil,
+                        evidence: evidence
+                    )
+                ]
+            }
 
             let update =
                 try await coordinator
                     .processVerifiedBackgroundObservation(
-                        [],
+                        recognizedPlaces,
                         trigger:
                             trigger,
                         at:
@@ -146,7 +177,8 @@ final class BackgroundRecognitionEventProcessor {
                     )
 
             return BackgroundRecognitionProcessingResult(
-                recognizedPlaces: [],
+                recognizedPlaces:
+                    recognizedPlaces,
                 visitUpdate:
                     update
             )

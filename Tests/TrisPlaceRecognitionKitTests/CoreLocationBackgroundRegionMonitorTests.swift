@@ -858,8 +858,10 @@ private extension
                 distanceMeters: 0
             )
 
-        return BackgroundMonitoredRegion(
-            candidate: candidate
+        return try #require(
+            BackgroundMonitoredRegion(
+                candidate: candidate
+            )
         )
     }
 
