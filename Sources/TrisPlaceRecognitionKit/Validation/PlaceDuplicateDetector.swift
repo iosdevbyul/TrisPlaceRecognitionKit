@@ -106,8 +106,15 @@ private extension PlaceDuplicateDetector {
         existing: RegisteredPlace
     ) -> Double? {
 
-        let candidateRadius = candidate.location.recognitionRadius
-        let existingRadius = existing.location.recognitionRadius
+        guard
+            let candidateLocation = candidate.location,
+            let existingLocation = existing.location
+        else {
+            return nil
+        }
+
+        let candidateRadius = candidateLocation.recognitionRadius
+        let existingRadius = existingLocation.recognitionRadius
 
         guard candidateRadius.isFinite,
               candidateRadius > 0,
@@ -117,9 +124,9 @@ private extension PlaceDuplicateDetector {
         }
 
         guard let distance = PlaceProximityMatcher.distanceMeters(
-            latitude: candidate.location.latitude,
-            longitude: candidate.location.longitude,
-            from: existing.location
+            latitude: candidateLocation.latitude,
+            longitude: candidateLocation.longitude,
+            from: existingLocation
         ) else {
             return nil
         }
