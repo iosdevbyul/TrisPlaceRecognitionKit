@@ -266,6 +266,164 @@ struct AutomaticPlacePresenceTests {
         )
     }
 
+    @Test
+    func dualSignalRegionExitKeepsVisitWhileWiFiStillMatches() async throws {
+        let locationProvider = MockLocationProvider()
+        let wifiProvider = MockWiFiProvider(
+            network: WiFiNetwork(
+                ssid: "GYM_WIFI",
+                bssid: nil
+            )
+        )
+        let placeStore = MockPlaceStore()
+        let visitStore = InMemoryPlaceVisitStore()
+
+        let place = RegisteredPlace(
+            name: try PlaceName("Gym"),
+            location: PlaceLocation(
+                latitude: 37.5665,
+                longitude: 126.9780,
+                recognitionRadius: 100
+            ),
+            networkIdentity: PlaceNetworkIdentity(
+                ssid: "GYM_WIFI",
+                bssid: nil
+            )
+        )
+
+        try await placeStore.save(place)
+
+        let record = PlaceVisitRecord(
+            placeID: place.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            arrivalEvidence: .ssid
+        )
+
+        try await visitStore.apply(
+            PlaceVisitUpdate(
+                events: [
+                    PlaceVisitEvent(
+                        visitID: record.id,
+                        placeID: place.id,
+                        kind: .arrived,
+                        occurredAt: record.startedAt
+                    )
+                ],
+                startedVisits: [record]
+            )
+        )
+
+        let recognitionService = PlaceRecognitionService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: placeStore
+        )
+
+        let coordinator = PlaceVisitCoordinator(
+            store: visitStore
+        )
+
+        _ = try await coordinator.restore()
+
+        let processor = BackgroundRecognitionEventProcessor(
+            recognitionService: recognitionService,
+            coordinator: coordinator,
+            recognitionPolicy: .wifiOrGPS
+        )
+
+        let result = try await processor.handle(
+            .monitoredRegionExited(
+                placeID: place.id
+            ),
+            at: Date(timeIntervalSince1970: 2_000)
+        )
+
+        #expect(result.events.isEmpty)
+        #expect(
+            try await coordinator
+                .activeVisits()
+                .first?
+                .placeID == place.id
+        )
+    }
+
+    @Test
+    func dualSignalRegionExitEndsVisitAfterWiFiIsLost() async throws {
+        let locationProvider = MockLocationProvider()
+        let wifiProvider = MockWiFiProvider(
+            network: nil
+        )
+        let placeStore = MockPlaceStore()
+        let visitStore = InMemoryPlaceVisitStore()
+
+        let place = RegisteredPlace(
+            name: try PlaceName("Gym"),
+            location: PlaceLocation(
+                latitude: 37.5665,
+                longitude: 126.9780,
+                recognitionRadius: 100
+            ),
+            networkIdentity: PlaceNetworkIdentity(
+                ssid: "GYM_WIFI",
+                bssid: nil
+            )
+        )
+
+        try await placeStore.save(place)
+
+        let record = PlaceVisitRecord(
+            placeID: place.id,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            arrivalEvidence: .ssid
+        )
+
+        try await visitStore.apply(
+            PlaceVisitUpdate(
+                events: [
+                    PlaceVisitEvent(
+                        visitID: record.id,
+                        placeID: place.id,
+                        kind: .arrived,
+                        occurredAt: record.startedAt
+                    )
+                ],
+                startedVisits: [record]
+            )
+        )
+
+        let recognitionService = PlaceRecognitionService(
+            locationProvider: locationProvider,
+            wifiProvider: wifiProvider,
+            placeStore: placeStore
+        )
+
+        let coordinator = PlaceVisitCoordinator(
+            store: visitStore
+        )
+
+        _ = try await coordinator.restore()
+
+        let processor = BackgroundRecognitionEventProcessor(
+            recognitionService: recognitionService,
+            coordinator: coordinator,
+            recognitionPolicy: .wifiOrGPS
+        )
+
+        let result = try await processor.handle(
+            .monitoredRegionExited(
+                placeID: place.id
+            ),
+            at: Date(timeIntervalSince1970: 2_000)
+        )
+
+        #expect(result.events.map(\.kind) == [.departed])
+        #expect(
+            try await coordinator
+                .activeVisits()
+                .isEmpty
+        )
+    }
+
     private func locationPoint(
         latitude: Double,
         longitude: Double
