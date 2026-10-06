@@ -49,7 +49,7 @@ struct LegacySwiftDataUpgradeTests {
             #expect(places.count == 1)
             #expect(original.id == originalID)
             #expect(original.name.value == "헬스장")
-            #expect(original.location.recognitionRadius == 100)
+            #expect(original.location?.recognitionRadius == 100)
             #expect(original.networkIdentity.ssid == "GYM_MAIN")
             #expect(original.additionalNetworkIdentities.isEmpty)
             #expect(try await store.migrationFingerprint(for: "fixture://legacy-v1")
