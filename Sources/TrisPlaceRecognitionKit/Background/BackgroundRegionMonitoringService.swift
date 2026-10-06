@@ -22,13 +22,6 @@ final class BackgroundRegionMonitoringService {
         requiresCandidateRefresh: Bool
     ) async throws {
 
-        guard !candidates.isEmpty else {
-
-            await monitor.stopAll()
-
-            return
-        }
-
         let regions =
             candidates.compactMap {
 
