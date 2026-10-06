@@ -77,8 +77,7 @@ struct BackgroundRegionMonitoringServiceTests {
 
         #expect(
             regions[0].radius
-                == gym.place.location
-                    .recognitionRadius
+                == gym.place.location?.recognitionRadius
         )
 
         #expect(
