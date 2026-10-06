@@ -91,7 +91,7 @@ struct BackgroundRegionMonitoringServiceTests {
     }
 
     @Test
-    func emptyCandidatesStopAllMonitoring()
+    func emptyCandidatesSynchronizeEmptyRegionsAndDisableRefresh()
         async throws {
 
         let monitor =
@@ -102,19 +102,29 @@ struct BackgroundRegionMonitoringServiceTests {
                 monitor: monitor
             )
 
-            try await service.synchronize(
-                candidates: [],
-                requiresCandidateRefresh: false
-            )
+        try await service.synchronize(
+            candidates: [],
+            requiresCandidateRefresh: false
+        )
 
         #expect(
             monitor
                 .synchronizedRegionBatches
-                .isEmpty
+                == [
+                    []
+                ]
         )
 
         #expect(
-            monitor.stopAllCallCount == 1
+            monitor
+                .candidateRefreshMonitoringValues
+                == [
+                    false
+                ]
+        )
+
+        #expect(
+            monitor.stopAllCallCount == 0
         )
     }
 
