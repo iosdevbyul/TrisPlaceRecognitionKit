@@ -84,14 +84,13 @@ public actor SwiftDataPlaceStore:
                 place.name.value
 
             existing.latitude =
-                place.location.latitude
+                place.location?.latitude
 
             existing.longitude =
-                place.location.longitude
+                place.location?.longitude
 
             existing.recognitionRadius =
-                place.location
-                    .recognitionRadius
+                place.location?.recognitionRadius
 
             existing.ssid =
                 place.networkIdentity
@@ -113,14 +112,11 @@ public actor SwiftDataPlaceStore:
                     name:
                         place.name.value,
                     latitude:
-                        place.location
-                            .latitude,
+                        place.location?.latitude,
                     longitude:
-                        place.location
-                            .longitude,
+                        place.location?.longitude,
                     recognitionRadius:
-                        place.location
-                            .recognitionRadius,
+                        place.location?.recognitionRadius,
                     ssid:
                         place.networkIdentity
                             .ssid,
@@ -297,16 +293,13 @@ public actor SwiftDataPlaceStore:
             updated.name.value
 
         model.latitude =
-            updated.location
-                .latitude
+            updated.location?.latitude
 
         model.longitude =
-            updated.location
-                .longitude
+            updated.location?.longitude
 
         model.recognitionRadius =
-            updated.location
-                .recognitionRadius
+            updated.location?.recognitionRadius
 
         model.ssid =
             updated.networkIdentity
@@ -378,14 +371,9 @@ private extension
                     model.name
                 ),
             location:
-                PlaceLocation(
-                    latitude:
-                        model.latitude,
-                    longitude:
-                        model.longitude,
-                    recognitionRadius:
+                makeLocation(
+                    from:
                         model
-                            .recognitionRadius
                 ),
             networkIdentity:
                 PlaceNetworkIdentity(
@@ -396,6 +384,24 @@ private extension
                 ),
             additionalNetworkIdentities:
                 additionalNetworks
+        )
+    }
+
+    func makeLocation(
+        from model: SwiftDataPlaceModel
+    ) -> PlaceLocation? {
+        guard
+            let latitude = model.latitude,
+            let longitude = model.longitude,
+            let recognitionRadius = model.recognitionRadius
+        else {
+            return nil
+        }
+
+        return PlaceLocation(
+            latitude: latitude,
+            longitude: longitude,
+            recognitionRadius: recognitionRadius
         )
     }
 }
