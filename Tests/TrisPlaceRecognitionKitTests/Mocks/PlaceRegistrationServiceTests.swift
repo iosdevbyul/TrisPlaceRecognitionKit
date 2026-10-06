@@ -45,15 +45,15 @@ struct PlaceRegistrationServiceTests {
         #expect(place.name.value == "헬스장")
 
         #expect(
-            place.location.latitude == 37.5665
+            place.location?.latitude == 37.5665
         )
 
         #expect(
-            place.location.longitude == 126.9780
+            place.location?.longitude == 126.9780
         )
 
         #expect(
-            place.location.recognitionRadius == 100
+            place.location?.recognitionRadius == 100
         )
 
         #expect(
@@ -116,7 +116,7 @@ struct PlaceRegistrationServiceTests {
         )
 
         #expect(
-            place.location.recognitionRadius == 200
+            place.location?.recognitionRadius == 200
         )
     }
 
