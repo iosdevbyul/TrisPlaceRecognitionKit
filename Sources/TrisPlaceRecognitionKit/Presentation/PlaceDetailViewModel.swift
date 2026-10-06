@@ -127,7 +127,9 @@ public final class PlaceDetailViewModel: ObservableObject {
                 for: placeID
             )
         }) {
-            recognitionRadius = updated.location.recognitionRadius
+            recognitionRadius =
+                updated.location?.recognitionRadius
+                ?? PlaceRegistrationService.defaultRecognitionRadius
         }
     }
 
