@@ -30,7 +30,7 @@ final class BackgroundRegionMonitoringService {
         }
 
         let regions =
-            candidates.map {
+            candidates.compactMap {
 
                 BackgroundMonitoredRegion(
                     candidate: $0
