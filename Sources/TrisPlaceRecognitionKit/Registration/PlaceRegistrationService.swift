@@ -11,7 +11,7 @@ import TrisLocationKit
 @MainActor
 public final class PlaceRegistrationService {
 
-    public static let defaultRecognitionRadius: Double = 100
+    public nonisolated static let defaultRecognitionRadius: Double = 100
 
     private let locationProvider: any LocationProviding
     private let wifiProvider: any WiFiProviding

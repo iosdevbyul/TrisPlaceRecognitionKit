@@ -15,6 +15,13 @@ import TrisLocationKit
 struct PlaceRegistrationServiceTests {
 
     @Test
+    func defaultRecognitionRadiusIsAccessibleFromNonisolatedContext() {
+        #expect(
+            defaultRecognitionRadiusFromNonisolatedContext() == 100
+        )
+    }
+
+    @Test
     func registersPlaceUsingCurrentLocationAndWiFi() async throws {
         let locationProvider = MockLocationProvider()
 
@@ -315,4 +322,9 @@ private extension PlaceRegistrationServiceTests {
             timestamp: Date()
         )
     }
+}
+
+
+private func defaultRecognitionRadiusFromNonisolatedContext() -> Double {
+    PlaceRegistrationService.defaultRecognitionRadius
 }
