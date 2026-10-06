@@ -769,22 +769,14 @@ struct BackgroundRecognitionEventProcessorTests {
     }
     
     @Test
-    func regionExitEndsActiveVisitWithoutRecognition()
+    func gpsOnlyRegionExitEndsActiveVisitWithoutWiFiLookup()
         async throws {
 
         let locationProvider =
             MockLocationProvider()
 
         let wifiProvider =
-            MockWiFiProvider(
-                network:
-                    WiFiNetwork(
-                        ssid:
-                            "HOME_WIFI",
-                        bssid:
-                            nil
-                    )
-            )
+            MockWiFiProvider()
 
         let placeStore =
             MockPlaceStore()
@@ -797,7 +789,7 @@ struct BackgroundRecognitionEventProcessorTests {
                 name:
                     "Home",
                 ssid:
-                    "HOME_WIFI"
+                    nil
             )
 
         try await placeStore.save(
