@@ -645,6 +645,9 @@ private extension
         case .gpsOnlyNoWiFiConfigured:
 
             return "gpsOnlyNoWiFiConfigured"
+            
+        case .systemRegion:
+            return "systemRegion"
         }
     }
 
@@ -671,6 +674,10 @@ private extension
         case "gpsOnlyNoWiFiConfigured":
 
             return .gpsOnlyNoWiFiConfigured
+            
+        case "systemRegion":
+
+            return .systemRegion
 
         default:
 

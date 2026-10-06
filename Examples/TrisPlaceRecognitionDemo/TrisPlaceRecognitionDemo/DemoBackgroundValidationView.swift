@@ -940,7 +940,7 @@ private extension DemoBackgroundValidationView {
                 "yyyy-MM-dd_HH-mm-ss"
 
             let fileName =
-                "place-visit-diagnostics-\(formatter.string(from: Date())).jsonl"
+                "place-visit-diagnostics-\(formatter.string(from: Date())).txt"
 
             let fileURL =
                 FileManager.default

@@ -74,42 +74,113 @@ final class BackgroundRecognitionEventProcessor {
 
         try Task.checkCancellation()
 
-        switch trigger {
-
-        case .significantLocationChange,
-             .monitoredRegionEntered,
-             .monitoredRegionExited:
-
-            break
-        }
-
-        let recognizedPlaces =
-            try await recognitionService
-                .recognizeCurrentPlaces(
-                    policy:
-                        recognitionPolicy
-                )
-
-        try Task.checkCancellation()
-
         let observedAt =
             timestamp ?? Date()
 
-        let update =
-            try await coordinator
-                .processVerifiedBackgroundObservation(
-                    recognizedPlaces,
-                    trigger:
-                        trigger,
-                    at:
-                        observedAt
+        switch trigger {
+
+        case .monitoredRegionEntered(
+            let placeID
+        ):
+
+            let registeredPlaces =
+                try await recognitionService
+                    .fetchRegisteredPlacesForBackgroundMonitoring()
+
+            guard
+                let place =
+                    registeredPlaces.first(
+                        where: {
+                            $0.id == placeID
+                        }
+                    )
+            else {
+
+                return BackgroundRecognitionProcessingResult(
+                    recognizedPlaces: [],
+                    visitUpdate:
+                        PlaceVisitUpdate()
+                )
+            }
+
+            let regionPlace =
+                RecognizedPlace(
+                    place:
+                        place,
+                    distanceMeters:
+                        nil,
+                    evidence:
+                        .systemRegion
                 )
 
-        return BackgroundRecognitionProcessingResult(
-            recognizedPlaces:
-                recognizedPlaces,
-            visitUpdate:
-                update
-        )
+            let update =
+                try await coordinator
+                    .processVerifiedBackgroundObservation(
+                        [
+                            regionPlace
+                        ],
+                        trigger:
+                            trigger,
+                        at:
+                            observedAt
+                    )
+
+            return BackgroundRecognitionProcessingResult(
+                recognizedPlaces: [
+                    regionPlace
+                ],
+                visitUpdate:
+                    update
+            )
+
+        case .monitoredRegionExited:
+
+            let update =
+                try await coordinator
+                    .processVerifiedBackgroundObservation(
+                        [],
+                        trigger:
+                            trigger,
+                        at:
+                            observedAt
+                    )
+
+            return BackgroundRecognitionProcessingResult(
+                recognizedPlaces: [],
+                visitUpdate:
+                    update
+            )
+
+        case .significantLocationChange:
+
+            let recognizedPlaces =
+                try await recognitionService
+                    .recognizeCurrentPlaces(
+                        policy:
+                            recognitionPolicy
+                    )
+
+            try Task.checkCancellation()
+
+            let completionTime =
+                timestamp ?? Date()
+
+            let update =
+                try await coordinator
+                    .processVerifiedBackgroundObservation(
+                        recognizedPlaces,
+                        trigger:
+                            trigger,
+                        at:
+                            completionTime
+                    )
+
+            return BackgroundRecognitionProcessingResult(
+                recognizedPlaces:
+                    recognizedPlaces,
+                visitUpdate:
+                    update
+            )
+        }
     }
 }
