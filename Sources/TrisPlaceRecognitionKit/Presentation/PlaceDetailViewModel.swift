@@ -50,7 +50,7 @@ public final class PlaceDetailViewModel: ObservableObject {
     ) {
         self.place = place
         self.name = place.name.value
-        self.recognitionRadius = place.location.recognitionRadius
+        self.recognitionRadius = place.location?.recognitionRadius ?? PlaceRegistrationService.defaultRecognitionRadius
         self.managementService = managementService
         self.networkManagementService = networkManagementService
         self.duplicateCheckService = duplicateCheckService
@@ -71,7 +71,8 @@ public final class PlaceDetailViewModel: ObservableObject {
             && !didDelete
             && recognitionRadius.isFinite
             && recognitionRadius > 0
-            && recognitionRadius != place.location.recognitionRadius
+            && place.location != nil
+            && recognitionRadius != place.location?.recognitionRadius
     }
 
     public func rename() async {
@@ -114,7 +115,7 @@ public final class PlaceDetailViewModel: ObservableObject {
                 to: radius
             )
         }) {
-            recognitionRadius = updated.location.recognitionRadius
+            recognitionRadius = updated.location?.recognitionRadius ?? PlaceRegistrationService.defaultRecognitionRadius
         }
     }
 
