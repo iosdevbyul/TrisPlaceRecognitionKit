@@ -112,77 +112,6 @@ struct BackgroundRecognitionEventProcessorTests {
     }
 
     @Test
-    func entryDoesNotCreateVisitWhenRecognitionDoesNotConfirmPlace()
-        async throws {
-
-        let locationProvider =
-            MockLocationProvider()
-
-        let wifiProvider =
-            MockWiFiProvider(
-                network: nil
-            )
-
-        let placeStore =
-            MockPlaceStore()
-
-        let visitStore =
-            InMemoryPlaceVisitStore()
-
-        let gym = try makePlace(
-            name: "Gym",
-            ssid: "GYM_WIFI"
-        )
-
-        try await placeStore.save(
-            gym
-        )
-
-        let recognitionService =
-            PlaceRecognitionService(
-                locationProvider:
-                    locationProvider,
-                wifiProvider:
-                    wifiProvider,
-                placeStore:
-                    placeStore
-            )
-
-        let coordinator =
-            PlaceVisitCoordinator(
-                store: visitStore
-            )
-
-        _ = try await coordinator.restore()
-
-        let processor =
-            BackgroundRecognitionEventProcessor(
-                recognitionService:
-                    recognitionService,
-                coordinator:
-                    coordinator,
-                recognitionPolicy:
-                    .wifiFirst
-            )
-
-        let update =
-            try await processor.handle(
-                .monitoredRegionEntered(
-                    placeID: gym.id
-                ),
-                at: time(100)
-            )
-
-        #expect(update.events.isEmpty)
-        #expect(update.startedVisits.isEmpty)
-
-        let activeVisits =
-            try await coordinator.activeVisits()
-
-        #expect(activeVisits.isEmpty)
-    }
-
-    @Test
     func verifiedExitConfirmsDepartureWithoutWaitingForForegroundInterval()
         async throws {
 
@@ -294,189 +223,6 @@ struct BackgroundRecognitionEventProcessorTests {
         #expect(
             storedVisit.endedAt
                 == time(120)
-        )
-    }
-
-    @Test
-    func exitDoesNotEndVisitWhenRecognitionStillConfirmsPlace()
-        async throws {
-
-        let locationProvider =
-            MockLocationProvider()
-
-        let wifiProvider =
-            MockWiFiProvider(
-                network: WiFiNetwork(
-                    ssid: "GYM_WIFI",
-                    bssid: nil
-                )
-            )
-
-        let placeStore =
-            MockPlaceStore()
-
-        let visitStore =
-            InMemoryPlaceVisitStore()
-
-        let gym = try makePlace(
-            name: "Gym",
-            ssid: "GYM_WIFI"
-        )
-
-        try await placeStore.save(
-            gym
-        )
-
-        let existingVisit =
-            try await seedActiveVisit(
-                place: gym,
-                store: visitStore
-            )
-
-        let recognitionService =
-            PlaceRecognitionService(
-                locationProvider:
-                    locationProvider,
-                wifiProvider:
-                    wifiProvider,
-                placeStore:
-                    placeStore
-            )
-
-        let coordinator =
-            PlaceVisitCoordinator(
-                store: visitStore
-            )
-
-        _ = try await coordinator.restore()
-
-        let processor =
-            BackgroundRecognitionEventProcessor(
-                recognitionService:
-                    recognitionService,
-                coordinator:
-                    coordinator,
-                recognitionPolicy:
-                    .wifiFirst
-            )
-
-        let update =
-            try await processor.handle(
-                .monitoredRegionExited(
-                    placeID: gym.id
-                ),
-                at: time(120)
-            )
-
-        #expect(update.events.isEmpty)
-        #expect(update.endedVisits.isEmpty)
-
-        let activeVisits =
-            try await coordinator.activeVisits()
-
-        #expect(
-            activeVisits == [
-                existingVisit
-            ]
-        )
-    }
-
-    @Test
-    func recognitionFailureDoesNotEndActiveVisit()
-        async throws {
-
-        let locationProvider =
-            MockLocationProvider()
-
-        locationProvider.requestCurrentLocationError =
-            BackgroundRecognitionProcessorTestError
-                .locationUnavailable
-
-        let wifiProvider =
-            MockWiFiProvider()
-
-        let placeStore =
-            MockPlaceStore()
-
-        let visitStore =
-            InMemoryPlaceVisitStore()
-
-        let gym = try makePlace(
-            name: "Gym",
-            ssid: nil
-        )
-
-        try await placeStore.save(
-            gym
-        )
-
-        let existingVisit =
-            try await seedActiveVisit(
-                place: gym,
-                store: visitStore
-            )
-
-        let recognitionService =
-            PlaceRecognitionService(
-                locationProvider:
-                    locationProvider,
-                wifiProvider:
-                    wifiProvider,
-                placeStore:
-                    placeStore
-            )
-
-        let coordinator =
-            PlaceVisitCoordinator(
-                store: visitStore
-            )
-
-        _ = try await coordinator.restore()
-
-        let processor =
-            BackgroundRecognitionEventProcessor(
-                recognitionService:
-                    recognitionService,
-                coordinator:
-                    coordinator,
-                recognitionPolicy:
-                    .gpsConstrained
-            )
-
-        do {
-
-            _ = try await processor.handle(
-                .monitoredRegionExited(
-                    placeID: gym.id
-                ),
-                at: time(120)
-            )
-
-            Issue.record(
-                "Expected recognition to fail."
-            )
-
-        } catch {
-
-            // Expected.
-        }
-
-        let activeVisits =
-            try await coordinator.activeVisits()
-
-        #expect(
-            activeVisits == [
-                existingVisit
-            ]
-        )
-
-        let events =
-            try await visitStore.fetchEvents()
-
-        #expect(events.count == 1)
-
-        #expect(
-            events.first?.kind == .arrived
         )
     }
 
@@ -650,10 +396,7 @@ struct BackgroundRecognitionEventProcessorTests {
         let backgroundTask =
             Task {
                 try await processor.handle(
-                    .monitoredRegionExited(
-                        placeID:
-                            home.id
-                    )
+                    .significantLocationChange
                 )
             }
 
@@ -1022,6 +765,242 @@ struct BackgroundRecognitionEventProcessorTests {
                 $0.kind == .departed
             }.count
                 == 2
+        )
+    }
+    
+    @Test
+    func regionExitEndsActiveVisitWithoutRecognition()
+        async throws {
+
+        let locationProvider =
+            MockLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider(
+                network:
+                    WiFiNetwork(
+                        ssid:
+                            "HOME_WIFI",
+                        bssid:
+                            nil
+                    )
+            )
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let home =
+            try makePlace(
+                name:
+                    "Home",
+                ssid:
+                    "HOME_WIFI"
+            )
+
+        try await placeStore.save(
+            home
+        )
+
+        let existingVisit =
+            try await seedActiveVisit(
+                place:
+                    home,
+                store:
+                    visitStore
+            )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let coordinator =
+            PlaceVisitCoordinator(
+                store:
+                    visitStore
+            )
+
+        _ =
+            try await coordinator
+                .restore()
+
+        let processor =
+            BackgroundRecognitionEventProcessor(
+                recognitionService:
+                    recognitionService,
+                coordinator:
+                    coordinator,
+                recognitionPolicy:
+                    .wifiFirst
+            )
+
+        let result =
+            try await processor.handle(
+                .monitoredRegionExited(
+                    placeID:
+                        home.id
+                ),
+                at:
+                    time(120)
+            )
+
+        #expect(
+            wifiProvider
+                .currentNetworkCallCount
+                == 0
+        )
+
+        #expect(
+            result
+                .endedVisits
+                .count
+                == 1
+        )
+
+        #expect(
+            result
+                .endedVisits
+                .first?
+                .id
+                == existingVisit.id
+        )
+
+        #expect(
+            result
+                .events
+                .first?
+                .kind
+                == .departed
+        )
+
+        #expect(
+            try await coordinator
+                .activeVisits()
+                .isEmpty
+        )
+    }
+    
+    @Test
+    func regionEntryStartsVisitWithoutRecognition()
+        async throws {
+
+        let locationProvider =
+            MockLocationProvider()
+
+        let wifiProvider =
+            MockWiFiProvider(
+                network:
+                    nil
+            )
+
+        let placeStore =
+            MockPlaceStore()
+
+        let visitStore =
+            InMemoryPlaceVisitStore()
+
+        let gym =
+            try makePlace(
+                name:
+                    "Gym",
+                ssid:
+                    "GYM_WIFI"
+            )
+
+        try await placeStore.save(
+            gym
+        )
+
+        let recognitionService =
+            PlaceRecognitionService(
+                locationProvider:
+                    locationProvider,
+                wifiProvider:
+                    wifiProvider,
+                placeStore:
+                    placeStore
+            )
+
+        let coordinator =
+            PlaceVisitCoordinator(
+                store:
+                    visitStore
+            )
+
+        _ =
+            try await coordinator
+                .restore()
+
+        let processor =
+            BackgroundRecognitionEventProcessor(
+                recognitionService:
+                    recognitionService,
+                coordinator:
+                    coordinator,
+                recognitionPolicy:
+                    .wifiFirst
+            )
+
+        let result =
+            try await processor.handle(
+                .monitoredRegionEntered(
+                    placeID:
+                        gym.id
+                ),
+                at:
+                    time(120)
+            )
+
+        #expect(
+            wifiProvider
+                .currentNetworkCallCount
+                == 0
+        )
+
+        #expect(
+            result
+                .startedVisits
+                .count
+                == 1
+        )
+
+        #expect(
+            result
+                .startedVisits
+                .first?
+                .placeID
+                == gym.id
+        )
+
+        #expect(
+            result
+                .events
+                .count
+                == 1
+        )
+
+        #expect(
+            result
+                .events
+                .first?
+                .kind
+                == .arrived
+        )
+
+        #expect(
+            try await coordinator
+                .activeVisits()
+                .first?
+                .placeID
+                == gym.id
         )
     }
 }

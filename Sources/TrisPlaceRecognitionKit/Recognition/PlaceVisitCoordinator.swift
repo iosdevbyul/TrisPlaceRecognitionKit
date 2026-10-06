@@ -108,11 +108,14 @@ public actor PlaceVisitCoordinator {
         return update
     }
 
-    // Used only after a background region transition
-    // has triggered a successful recognition request.
+    // Processes verified background observations.
     //
-    // The region event by itself must never be passed
-    // into the visit state machine as arrival/departure.
+    // Monitored region entry/exit transitions can be
+    // converted directly into visit transitions by the
+    // background event processor.
+    //
+    // Significant-location-change events still use
+    // real place recognition before reaching this method.
     @discardableResult
     func processVerifiedBackgroundObservation(
         _ recognizedPlaces: [RecognizedPlace],

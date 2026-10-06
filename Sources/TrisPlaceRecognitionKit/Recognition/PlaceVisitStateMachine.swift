@@ -422,16 +422,15 @@ public struct PlaceVisitStateMachine: Sendable {
         )
     }
 
-    // A background region event is not enough by itself
-    // to change visit state.
+    // Processes background observations that have already
+    // been classified by the background event processor.
     //
-    // The caller must first complete a successful
-    // PlaceRecognitionService request caused by the region
-    // event, then pass that successful observation here.
+    // Monitored region entry/exit transitions are treated
+    // as verified background visit evidence and therefore
+    // do not require foreground confirmation intervals.
     //
-    // Region transition + successful recognition is treated
-    // as verified evidence, so foreground confirmation
-    // intervals aren't required for the targeted place.
+    // Significant-location-change events still arrive with
+    // real recognition results.
     mutating func processVerifiedBackgroundObservation(
         _ recognizedPlaces: [RecognizedPlace],
         trigger: BackgroundRecognitionTrigger,

@@ -499,6 +499,10 @@ private extension DemoVisitHistoryView {
         case .gpsOnlyNoWiFiConfigured:
 
             return "GPS"
+
+        case .systemRegion:
+
+            return "System Region"
         }
     }
 }

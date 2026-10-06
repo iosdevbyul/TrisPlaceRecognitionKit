@@ -569,6 +569,54 @@ struct SwiftDataPlaceVisitStoreTests {
             #expect(events.first?.kind == .arrived)
         }
     }
+    
+    @available(iOS 17.0, *)
+    @Test
+    func persistsSystemRegionArrivalEvidence()
+        async throws {
+
+        let store =
+            try makeStore()
+
+        let record =
+            PlaceVisitRecord(
+                placeID:
+                    UUID(),
+                startedAt:
+                    time(0),
+                arrivalEvidence:
+                    .systemRegion
+            )
+
+        try await store.apply(
+            makeArrivalUpdate(
+                record
+            )
+        )
+
+        let visits =
+            try await store.fetchAll()
+
+        let storedVisit =
+            try #require(
+                visits.first
+            )
+
+        #expect(
+            storedVisit.id
+                == record.id
+        )
+
+        #expect(
+            storedVisit.placeID
+                == record.placeID
+        )
+
+        #expect(
+            storedVisit.arrivalEvidence
+                == .systemRegion
+        )
+    }
 }
 
 // MARK: - Test Helpers

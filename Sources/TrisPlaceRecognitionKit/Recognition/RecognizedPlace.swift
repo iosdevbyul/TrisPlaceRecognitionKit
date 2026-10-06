@@ -10,6 +10,7 @@ public enum PlaceRecognitionEvidence: Sendable, Equatable {
     case ssid
     case gpsOnlyWiFiUnavailable
     case gpsOnlyNoWiFiConfigured
+    case systemRegion
 }
 
 public struct RecognizedPlace: Sendable, Equatable {

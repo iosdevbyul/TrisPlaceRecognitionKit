@@ -281,6 +281,9 @@ private extension PlaceRecognitionEvidence {
         case .gpsOnlyWiFiUnavailable,
              .gpsOnlyNoWiFiConfigured:
             return 1
+
+        case .systemRegion:
+            return 0
         }
     }
 }
