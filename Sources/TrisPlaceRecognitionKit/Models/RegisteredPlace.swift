@@ -15,7 +15,7 @@ public struct RegisteredPlace: Identifiable,
 
     public let id: UUID
     public var name: PlaceName
-    public let location: PlaceLocation
+    public let location: PlaceLocation?
 
     // Preserve compatibility with existing places.
     public let networkIdentity: PlaceNetworkIdentity
@@ -44,7 +44,7 @@ public struct RegisteredPlace: Identifiable,
     public init(
         id: UUID = UUID(),
         name: PlaceName,
-        location: PlaceLocation,
+        location: PlaceLocation?,
         networkIdentity: PlaceNetworkIdentity,
         additionalNetworkIdentities: [PlaceNetworkIdentity] = []
     ) {
@@ -78,7 +78,7 @@ public struct RegisteredPlace: Identifiable,
             forKey: .name
         )
 
-        location = try container.decode(
+        location = try container.decodeIfPresent(
             PlaceLocation.self,
             forKey: .location
         )
@@ -101,7 +101,7 @@ public struct RegisteredPlace: Identifiable,
 
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
-        try container.encode(location, forKey: .location)
+        try container.encodeIfPresent(location, forKey: .location)
 
         try container.encode(
             networkIdentity,
