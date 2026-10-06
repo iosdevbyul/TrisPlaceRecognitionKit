@@ -8,4 +8,5 @@
 public enum PlaceRecognitionPolicy: Sendable, Equatable {
     case gpsConstrained
     case wifiFirst
+    case wifiOrGPS
 }
