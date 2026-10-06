@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import UserNotifications
+import TrisNotificationKit
 
 struct UserNotificationPlaceVisitNotifier:
     PlaceVisitNotifying {
@@ -15,32 +15,17 @@ struct UserNotificationPlaceVisitNotifier:
         placeName: String
     ) async throws {
 
-        let content =
-            UNMutableNotificationContent()
+        let notificationService =
+            LocalNotificationService()
 
-        content.title =
-            "장소 도착"
-
-        content.body =
-            "\(placeName)에 도착했습니다."
-
-        content.sound =
-            .default
-
-        let request =
-            UNNotificationRequest(
+        try await notificationService
+            .send(
+                title:
+                    "장소 도착",
+                body:
+                    "\(placeName)에 도착했습니다.",
                 identifier:
-                    makeIdentifier(),
-                content:
-                    content,
-                trigger:
-                    nil
-            )
-
-        try await UNUserNotificationCenter
-            .current()
-            .add(
-                request
+                    makeIdentifier()
             )
     }
 
@@ -48,32 +33,17 @@ struct UserNotificationPlaceVisitNotifier:
         placeName: String
     ) async throws {
 
-        let content =
-            UNMutableNotificationContent()
+        let notificationService =
+            LocalNotificationService()
 
-        content.title =
-            "장소 이탈"
-
-        content.body =
-            "\(placeName)에서 나왔습니다."
-
-        content.sound =
-            .default
-
-        let request =
-            UNNotificationRequest(
+        try await notificationService
+            .send(
+                title:
+                    "장소 이탈",
+                body:
+                    "\(placeName)에서 나왔습니다.",
                 identifier:
-                    makeIdentifier(),
-                content:
-                    content,
-                trigger:
-                    nil
-            )
-
-        try await UNUserNotificationCenter
-            .current()
-            .add(
-                request
+                    makeIdentifier()
             )
     }
 
