@@ -11,4 +11,5 @@ public enum PlaceRegistrationError: Error,
     case emptyName
     case nameTooLong
     case currentWiFiUnavailable
+    case noAvailableSignal
 }
