@@ -84,7 +84,12 @@ private extension PlaceRegistrationView {
                 )
                 .disabled(viewModel.phase == .preparing)
 
-                Text(\n                    PlaceL10n.format(\n                        "place.name.max_length",\n                        PlaceName.maximumLength\n                    )\n                )
+                Text(
+                    PlaceL10n.format(
+                        "place.name.max_length",
+                        PlaceName.maximumLength
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

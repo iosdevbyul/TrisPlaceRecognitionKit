@@ -90,7 +90,9 @@ public struct PlaceListView: View {
                         .subheadline
                     )
 
-                    Button(\n                        PlaceL10n.string("place.retry")\n                    ) {
+                    Button(
+                        PlaceL10n.string("place.retry")
+                    ) {
 
                         Task {
 
@@ -107,7 +109,9 @@ public struct PlaceListView: View {
 
                 Spacer()
 
-                ProgressView(\n                    PlaceL10n.string("place.loading")\n                )
+                ProgressView(
+                    PlaceL10n.string("place.loading")
+                )
 
                 Spacer()
 
@@ -115,12 +119,16 @@ public struct PlaceListView: View {
 
                 Spacer()
 
-                Text(\n                    PlaceL10n.string("place.empty")\n                )
+                Text(
+                    PlaceL10n.string("place.empty")
+                )
                 .foregroundStyle(
                     .secondary
                 )
 
-                Button(\n                    PlaceL10n.string("place.refresh")\n                ) {
+                Button(
+                    PlaceL10n.string("place.refresh")
+                ) {
 
                     Task {
 
@@ -228,7 +236,9 @@ private extension PlaceListView {
 
                 if isRecognized {
 
-                    Text(\n                        PlaceL10n.string("place.current")\n                    )
+                    Text(
+                        PlaceL10n.string("place.current")
+                    )
                     .font(
                         .subheadline
                     )
@@ -239,7 +249,10 @@ private extension PlaceListView {
                     if let activeVisit {
 
                         Text(
-                            PlaceL10n.format(\n                                "place.arrived",\n                                formattedEntryTime(activeVisit.startedAt)\n                            )
+                            PlaceL10n.format(
+                                "place.arrived",
+                                formattedEntryTime(activeVisit.startedAt)
+                            )
                         )
                         .font(
                             .caption
@@ -250,7 +263,9 @@ private extension PlaceListView {
 
                     } else {
 
-                        Text(\n                            PlaceL10n.string("place.detected")\n                        )
+                        Text(
+                            PlaceL10n.string("place.detected")
+                        )
                         .font(
                             .caption
                         )

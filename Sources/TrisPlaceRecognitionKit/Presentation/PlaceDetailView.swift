@@ -90,10 +90,12 @@ public struct PlaceDetailView: View {
             }
         }
         .interactiveDismissDisabled(viewModel.isWorking)
-        .alert(\n            PlaceL10n.string("place.detail.delete_title"),
+        .alert(
+            PlaceL10n.string("place.detail.delete_title"),
             isPresented: $isShowingDeleteConfirmation
         ) {
-            Button(\n                PlaceL10n.string("common.delete"),
+            Button(
+                PlaceL10n.string("common.delete"),
                 role: .destructive
             ) {
                 Task {
@@ -101,7 +103,8 @@ public struct PlaceDetailView: View {
                 }
             }
 
-            Button(\n                PlaceL10n.string("common.cancel"),
+            Button(
+                PlaceL10n.string("common.cancel"),
                 role: .cancel
             ) {}
         } message: {
@@ -112,12 +115,14 @@ public struct PlaceDetailView: View {
                 )
             )
         }
-        .confirmationDialog(\n            PlaceL10n.string("place.detail.wifi_remove_title"),
+        .confirmationDialog(
+            PlaceL10n.string("place.detail.wifi_remove_title"),
             isPresented: $isShowingWiFiRemovalConfirmation,
             titleVisibility: .visible
         ) {
             if let networkToRemove {
-                Button(\n                    PlaceL10n.string("place.detail.wifi_remove_title"),
+                Button(
+                    PlaceL10n.string("place.detail.wifi_remove_title"),
                     role: .destructive
                 ) {
                     let network = networkToRemove
@@ -132,7 +137,8 @@ public struct PlaceDetailView: View {
                 }
             }
 
-            Button(\n                PlaceL10n.string("common.cancel"),
+            Button(
+                PlaceL10n.string("common.cancel"),
                 role: .cancel
             ) {
                 networkToRemove = nil
@@ -241,7 +247,8 @@ private extension PlaceDetailView {
 
     var nameSection: some View {
         Section(PlaceL10n.string("place.name")) {
-            TextField(\n                PlaceL10n.string("place.name"),
+            TextField(
+                PlaceL10n.string("place.name"),
                 text: $viewModel.name
             )
             .disabled(viewModel.isWorking)
@@ -271,7 +278,8 @@ private extension PlaceDetailView {
 
                 Spacer()
 
-                TextField(\n                    PlaceL10n.string("place.radius.label"),
+                TextField(
+                    PlaceL10n.string("place.radius.label"),
                     value: $viewModel.recognitionRadius,
                     format: .number
                 )
@@ -381,7 +389,8 @@ private extension PlaceDetailView {
 
                         Spacer()
 
-                        Button(\n                            PlaceL10n.string("place.detail.remove"),
+                        Button(
+                            PlaceL10n.string("place.detail.remove"),
                             role: .destructive
                         ) {
                             networkToRemove = network
@@ -415,7 +424,8 @@ private extension PlaceDetailView {
 
     var deleteSection: some View {
         Section {
-            Button(\n                PlaceL10n.string("place.detail.delete"),
+            Button(
+                PlaceL10n.string("place.detail.delete"),
                 role: .destructive
             ) {
                 isShowingDeleteConfirmation = true

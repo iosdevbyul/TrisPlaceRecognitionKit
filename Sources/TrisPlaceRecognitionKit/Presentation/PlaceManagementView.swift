@@ -108,7 +108,9 @@ public struct PlaceManagementView: View {
                             place
                         )
                 }
-                .navigationTitle(\n                    PlaceL10n.string("place.navigation_title")\n                )
+                .navigationTitle(
+                    PlaceL10n.string("place.navigation_title")
+                )
                 .toolbar {
                     addPlaceToolbar
                 }
@@ -127,7 +129,9 @@ public struct PlaceManagementView: View {
                             place
                         )
                 }
-                .navigationTitle(\n                    PlaceL10n.string("place.navigation_title")\n                )
+                .navigationTitle(
+                    PlaceL10n.string("place.navigation_title")
+                )
                 .toolbar {
                     addPlaceToolbar
                 }
@@ -209,7 +213,8 @@ private extension PlaceManagementView {
 
             } label: {
 
-                Label(\n                    PlaceL10n.string("place.add"),
+                Label(
+                    PlaceL10n.string("place.add"),
                     systemImage:
                         "plus"
                 )
@@ -237,7 +242,9 @@ private extension PlaceManagementView {
                 activeSheet =
                     nil
             }
-            .navigationTitle(\n                PlaceL10n.string("place.registration.title")\n            )
+            .navigationTitle(
+                PlaceL10n.string("place.registration.title")
+            )
             .navigationBarTitleDisplayMode(
                 .inline
             )
