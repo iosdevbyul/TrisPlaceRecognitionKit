@@ -16,6 +16,7 @@ public struct PlaceRecognitionCardConfiguration {
     public var enableButtonTitle: String
     public var disableButtonTitle: String
     public var manageButtonTitle: String
+    public var registeredPlaceSummaryTitle: String
     public var preparingMessage: String
     public var unavailableMessage: String
     public var unregisteredMessage: String
@@ -28,6 +29,7 @@ public struct PlaceRecognitionCardConfiguration {
         enableButtonTitle: String = "자동 인식 켜기",
         disableButtonTitle: String = "자동 인식 끄기",
         manageButtonTitle: String = "장소 관리",
+        registeredPlaceSummaryTitle: String = "등록된 장소",
         preparingMessage: String = "장소 인식 준비 중",
         unavailableMessage: String = "장소 인식 서비스를 준비하고 있습니다.",
         unregisteredMessage: String = "현재 등록된 장소에 있지 않습니다."
@@ -39,6 +41,7 @@ public struct PlaceRecognitionCardConfiguration {
         self.enableButtonTitle = enableButtonTitle
         self.disableButtonTitle = disableButtonTitle
         self.manageButtonTitle = manageButtonTitle
+        self.registeredPlaceSummaryTitle = registeredPlaceSummaryTitle
         self.preparingMessage = preparingMessage
         self.unavailableMessage = unavailableMessage
         self.unregisteredMessage = unregisteredMessage
@@ -49,6 +52,9 @@ public struct PlaceRecognitionCardConfiguration {
 public struct PlaceRecognitionCard: View {
     @State
     private var isShowingRegistration = false
+
+    @StateObject
+    private var placeCountModel = PlaceRecognitionCardCountModel()
 
     private let configuration:
         PlaceRecognitionCardConfiguration
@@ -170,6 +176,12 @@ public struct PlaceRecognitionCard: View {
 
             recognitionStatus
 
+            if let count = placeCountModel.count {
+                Text("\(configuration.registeredPlaceSummaryTitle) \(count)곳")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
             if let statusMessage {
                 Text(statusMessage)
                     .font(.footnote)
@@ -202,6 +214,15 @@ public struct PlaceRecognitionCard: View {
                 $isShowingRegistration
         ) {
             registrationSheet
+        }
+        .task(id: isPreparing) {
+            await placeCountModel.reload(placeStore: placeStore)
+        }
+        .onAppear {
+            // Returning from PlaceManagementView also refreshes deletions/edits.
+            Task {
+                await placeCountModel.reload(placeStore: placeStore)
+            }
         }
     }
 }
@@ -371,6 +392,8 @@ private extension PlaceRecognitionCard {
     func refreshAfterRegistration(
         _ place: RegisteredPlace
     ) async {
+        await placeCountModel.reload(placeStore: placeStore)
+
         if let visitManager {
             try? await visitManager
                 .refreshBackgroundRecognition()
