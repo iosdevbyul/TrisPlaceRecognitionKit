@@ -85,7 +85,7 @@ public final class PlaceDetailViewModel: ObservableObject {
         do {
             validatedName = try PlaceName(name)
         } catch {
-            errorMessage = "장소 이름은 1~10자로 입력해 주세요."
+            errorMessage = PlaceL10n.string("place.error.name_length")
             return
         }
 
@@ -258,26 +258,26 @@ private extension PlaceDetailViewModel {
         if let error = error as? PlaceManagementError {
             switch error {
             case .placeNotFound:
-                return "해당 장소를 찾을 수 없습니다."
+                return PlaceL10n.string("place.error.not_found")
 
             case .invalidRecognitionRadius:
-                return "올바른 인식 반경을 입력해 주세요."
+                return PlaceL10n.string("place.error.radius")
 
             case .invalidCurrentLocation:
-                return "현재 위치를 정확하게 확인할 수 없습니다."
+                return PlaceL10n.string("place.error.invalid_location")
             }
         }
 
         if let error = error as? PlaceNetworkManagementError {
             switch error {
             case .placeNotFound:
-                return "해당 장소를 찾을 수 없습니다."
+                return PlaceL10n.string("place.error.not_found")
 
             case .currentWiFiUnavailable:
-                return "현재 연결된 Wi-Fi를 확인할 수 없습니다."
+                return PlaceL10n.string("place.error.wifi_unavailable")
 
             case .networkNotRegistered:
-                return "이미 제거되었거나 등록되지 않은 Wi-Fi입니다."
+                return PlaceL10n.string("place.error.network_not_registered")
             }
         }
 

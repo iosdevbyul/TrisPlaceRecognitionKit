@@ -56,7 +56,7 @@ public struct PlaceRegistrationView: View {
                 placement: .cancellationAction
             ) {
                 if viewModel.phase != .completed {
-                    Button("닫기") {
+                    Button(PlaceL10n.string("common.close")) {
                         viewModel.cancelPreview()
                         dismiss()
                     }
@@ -77,30 +77,30 @@ private extension PlaceRegistrationView {
 
     var editingForm: some View {
         Form {
-            Section("장소 이름") {
+            Section(PlaceL10n.string("place.name")) {
                 TextField(
-                    "예: 헬스장",
+                    PlaceL10n.string("place.name.placeholder"),
                     text: $viewModel.name
                 )
                 .disabled(viewModel.phase == .preparing)
 
-                Text("최대 \(PlaceName.maximumLength)자")
+                Text(\n                    PlaceL10n.format(\n                        "place.name.max_length",\n                        PlaceName.maximumLength\n                    )\n                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("등록 방식") {
+            Section(PlaceL10n.string("place.registration.method")) {
                 Picker(
-                    "인식 방식",
+                    PlaceL10n.string("place.registration.method.label"),
                     selection: $viewModel.method
                 ) {
-                    Text("자동")
+                    Text(PlaceL10n.string("place.registration.automatic"))
                         .tag(PlaceRegistrationMethod.automatic)
 
                     Text("Wi-Fi")
                         .tag(PlaceRegistrationMethod.wifi)
 
-                    Text("GPS 전용")
+                    Text(PlaceL10n.string("place.gps_only"))
                         .tag(PlaceRegistrationMethod.gpsOnly)
                 }
                 .disabled(viewModel.phase == .preparing)
@@ -110,9 +110,9 @@ private extension PlaceRegistrationView {
                     .foregroundStyle(.secondary)
             }
 
-            Section("인식 반경") {
+            Section(PlaceL10n.string("place.recognition_radius")) {
                 Picker(
-                    "반경",
+                    PlaceL10n.string("place.radius.label"),
                     selection: $viewModel.recognitionRadius
                 ) {
                     Text("50m").tag(50.0)
@@ -125,8 +125,9 @@ private extension PlaceRegistrationView {
 
             Section {
                 Text(
-                    "등록 정보를 확인할 때 현재 위치와 " +
-                    "선택한 방식에 필요한 네트워크 정보를 수집합니다."
+                    PlaceL10n.string(
+                        "place.registration.collection_description"
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -137,13 +138,13 @@ private extension PlaceRegistrationView {
                 }
 
                 if viewModel.phase == .preparing {
-                    ProgressView("등록 정보 확인 중")
+                    ProgressView(PlaceL10n.string("place.registration.preparing"))
 
-                    Button("취소") {
+                    Button(PlaceL10n.string("common.cancel")) {
                         viewModel.cancelPreview()
                     }
                 } else {
-                    Button("등록 정보 확인") {
+                    Button(PlaceL10n.string("place.registration.review")) {
                         Task {
                             await viewModel.prepare()
                         }
@@ -157,21 +158,23 @@ private extension PlaceRegistrationView {
     var reviewForm: some View {
         Form {
             if let candidate = viewModel.candidate {
-                Section("등록 정보") {
+                Section(PlaceL10n.string("place.registration.info")) {
                     detailRow(
-                        "장소 이름",
+                        PlaceL10n.string("place.name"),
                         value: candidate.name.value
                     )
 
                     detailRow(
-                        "인식 반경",
+                        PlaceL10n.string("place.recognition_radius"),
                         value: candidate.location.map {
                             "\(Int($0.recognitionRadius))m"
-                        } ?? "GPS 위치 미등록"
+                        } ?? PlaceL10n.string(
+                            "place.gps_not_registered"
+                        )
                     )
 
                     detailRow(
-                        "위도",
+                        PlaceL10n.string("place.latitude"),
                         value: String(
                             format: "%.5f",
                             candidate.location?.latitude ?? 0
@@ -179,7 +182,7 @@ private extension PlaceRegistrationView {
                     )
 
                     detailRow(
-                        "경도",
+                        PlaceL10n.string("place.longitude"),
                         value: String(
                             format: "%.5f",
                             candidate.location?.longitude ?? 0
@@ -189,7 +192,7 @@ private extension PlaceRegistrationView {
 
                 Section("Wi-Fi") {
                     if candidate.networkIdentities.isEmpty {
-                        Text("저장되는 Wi-Fi 정보 없음")
+                        Text(PlaceL10n.string("place.wifi.none"))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(
@@ -200,7 +203,7 @@ private extension PlaceRegistrationView {
                                 alignment: .leading,
                                 spacing: 4
                             ) {
-                                Text(network.ssid ?? "SSID 없음")
+                                Text(network.ssid ?? PlaceL10n.string("place.ssid.none"))
 
                                 if let bssid = network.bssid {
                                     Text(bssid)
@@ -213,10 +216,11 @@ private extension PlaceRegistrationView {
                 }
 
                 if !viewModel.warnings.isEmpty {
-                    Section("중복 장소 경고") {
+                    Section(PlaceL10n.string("place.duplicate_warning")) {
                         Text(
-                            "비슷한 장소가 이미 등록되어 있습니다. " +
-                            "확인 후에도 새 장소를 등록할 수 있습니다."
+                            PlaceL10n.string(
+                                "place.duplicate_description"
+                            )
                         )
                         .font(.subheadline)
 
@@ -258,15 +262,15 @@ private extension PlaceRegistrationView {
                 }
 
                 if viewModel.phase == .saving {
-                    ProgressView("장소 등록 중")
+                    ProgressView(PlaceL10n.string("place.registration.saving"))
                 } else {
-                    Button("장소 등록") {
+                    Button(PlaceL10n.string("place.registration.register")) {
                         Task {
                             await viewModel.confirmRegistration()
                         }
                     }
 
-                    Button("수정하기") {
+                    Button(PlaceL10n.string("common.edit")) {
                         viewModel.cancelPreview()
                     }
                 }
@@ -280,7 +284,7 @@ private extension PlaceRegistrationView {
                 .font(.system(size: 44))
                 .foregroundStyle(.green)
 
-            Text("장소가 등록되었습니다")
+            Text(PlaceL10n.string("place.registration.completed"))
                 .font(.headline)
 
             if let name = viewModel.registeredPlace?.name.value {
@@ -295,13 +299,13 @@ private extension PlaceRegistrationView {
     var methodDescription: String {
         switch viewModel.method {
         case .automatic:
-            return "현재 Wi-Fi가 확인되면 함께 저장하고, 없으면 GPS만 사용합니다."
+            return PlaceL10n.string("place.method.automatic.description")
 
         case .wifi:
-            return "현재 연결된 Wi-Fi를 반드시 확인한 뒤 등록합니다."
+            return PlaceL10n.string("place.method.wifi.description")
 
         case .gpsOnly:
-            return "Wi-Fi를 저장하지 않고 GPS 위치만 사용합니다."
+            return PlaceL10n.string("place.method.gps.description")
         }
     }
 
@@ -310,14 +314,14 @@ private extension PlaceRegistrationView {
     ) -> String {
         switch reason {
         case .sameBSSID:
-            return "동일한 Wi-Fi 공유기가 등록되어 있습니다."
+            return PlaceL10n.string("place.duplicate.same_bssid")
 
         case .sameSSID:
-            return "동일한 Wi-Fi 이름이 등록되어 있습니다."
+            return PlaceL10n.string("place.duplicate.same_ssid")
 
         case .overlappingGPS(let distance):
             return String(
-                format: "인식 영역이 겹칩니다. 중심 간 거리: %.0fm",
+                format: PlaceL10n.string("place.duplicate.overlap"),
                 distance
             )
         }

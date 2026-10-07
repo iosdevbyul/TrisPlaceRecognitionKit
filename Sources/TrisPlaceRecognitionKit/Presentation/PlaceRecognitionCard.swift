@@ -22,17 +22,17 @@ public struct PlaceRecognitionCardConfiguration {
     public var unregisteredMessage: String
 
     public init(
-        title: String = "장소 자동 인식",
-        registrationPrompt: String = "현재 장소를 등록하시겠습니까?",
-        registrationButtonTitle: String = "현재 장소 등록",
-        registrationNavigationTitle: String = "장소 등록",
-        enableButtonTitle: String = "자동 인식 켜기",
-        disableButtonTitle: String = "자동 인식 끄기",
-        manageButtonTitle: String = "장소 관리",
-        registeredPlaceSummaryTitle: String = "등록된 장소",
-        preparingMessage: String = "장소 인식 준비 중",
-        unavailableMessage: String = "장소 인식 서비스를 준비하고 있습니다.",
-        unregisteredMessage: String = "현재 등록된 장소에 있지 않습니다."
+        title: String = "Place Auto Detection",
+        registrationPrompt: String = "Register your current location as a place?",
+        registrationButtonTitle: String = "Register Current Place",
+        registrationNavigationTitle: String = "Register Place",
+        enableButtonTitle: String = "Turn On Auto Detection",
+        disableButtonTitle: String = "Turn Off Auto Detection",
+        manageButtonTitle: String = "Manage Places",
+        registeredPlaceSummaryTitle: String = "Registered Places",
+        preparingMessage: String = "Preparing place recognition",
+        unavailableMessage: String = "Preparing the place recognition service.",
+        unregisteredMessage: String = "You are not currently at a registered place."
     ) {
         self.title = title
         self.registrationPrompt = registrationPrompt
@@ -177,7 +177,13 @@ public struct PlaceRecognitionCard: View {
             recognitionStatus
 
             if let count = placeCountModel.count {
-                Text("\(configuration.registeredPlaceSummaryTitle) \(count)곳")
+                Text(
+                    PlaceL10n.format(
+                        "place.card.count",
+                        configuration.registeredPlaceSummaryTitle,
+                        count
+                    )
+                )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -425,7 +431,10 @@ private struct PlaceRecognitionCardStatusView:
                 .place
         {
             Label(
-                "\(place.name.value)에 있습니다.",
+                PlaceL10n.format(
+                    "place.card.at_place",
+                    place.name.value
+                ),
                 systemImage:
                     "checkmark.circle.fill"
             )
@@ -435,7 +444,9 @@ private struct PlaceRecognitionCardStatusView:
             .isEmpty
         {
             Label(
-                "등록된 장소에 있습니다.",
+                PlaceL10n.string(
+                    "place.card.at_registered"
+                ),
                 systemImage:
                     "checkmark.circle.fill"
             )
