@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "TrisPlaceRecognitionKit",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v15)
     ],

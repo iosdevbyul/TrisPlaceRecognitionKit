@@ -87,3 +87,11 @@
 "place.error.not_found" = "The place could not be found.";
 "place.error.invalid_location" = "The current location could not be determined accurately.";
 "place.error.network_not_registered" = "The Wi-Fi network was already removed or is not registered.";
+
+"place.default_name" = "Place";
+"place.card.enable" = "Turn On Auto Detection";
+"place.card.disable" = "Turn Off Auto Detection";
+"place.notification.arrival_title" = "Place Arrival";
+"place.notification.arrival_body" = "You arrived at %@.";
+"place.notification.departure_title" = "Place Departure";
+"place.notification.departure_body" = "You left %@.";

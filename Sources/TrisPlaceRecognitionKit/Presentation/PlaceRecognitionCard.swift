@@ -22,29 +22,40 @@ public struct PlaceRecognitionCardConfiguration {
     public var unregisteredMessage: String
 
     public init(
-        title: String = "Place Auto Detection",
-        registrationPrompt: String = "Register your current location as a place?",
-        registrationButtonTitle: String = "Register Current Place",
-        registrationNavigationTitle: String = "Register Place",
-        enableButtonTitle: String = "Turn On Auto Detection",
-        disableButtonTitle: String = "Turn Off Auto Detection",
-        manageButtonTitle: String = "Manage Places",
-        registeredPlaceSummaryTitle: String = "Registered Places",
-        preparingMessage: String = "Preparing place recognition",
-        unavailableMessage: String = "Preparing the place recognition service.",
-        unregisteredMessage: String = "You are not currently at a registered place."
+        title: String? = nil,
+        registrationPrompt: String? = nil,
+        registrationButtonTitle: String? = nil,
+        registrationNavigationTitle: String? = nil,
+        enableButtonTitle: String? = nil,
+        disableButtonTitle: String? = nil,
+        manageButtonTitle: String? = nil,
+        registeredPlaceSummaryTitle: String? = nil,
+        preparingMessage: String? = nil,
+        unavailableMessage: String? = nil,
+        unregisteredMessage: String? = nil
     ) {
         self.title = title
+            ?? PlaceL10n.string("place.card.default_title")
         self.registrationPrompt = registrationPrompt
+            ?? PlaceL10n.string("place.card.default_prompt")
         self.registrationButtonTitle = registrationButtonTitle
+            ?? PlaceL10n.string("place.card.default_register")
         self.registrationNavigationTitle = registrationNavigationTitle
+            ?? PlaceL10n.string("place.registration.title")
         self.enableButtonTitle = enableButtonTitle
+            ?? PlaceL10n.string("place.card.enable")
         self.disableButtonTitle = disableButtonTitle
+            ?? PlaceL10n.string("place.card.disable")
         self.manageButtonTitle = manageButtonTitle
+            ?? PlaceL10n.string("place.card.default_manage")
         self.registeredPlaceSummaryTitle = registeredPlaceSummaryTitle
+            ?? PlaceL10n.string("place.card.default_registered")
         self.preparingMessage = preparingMessage
+            ?? PlaceL10n.string("place.card.preparing")
         self.unavailableMessage = unavailableMessage
+            ?? PlaceL10n.string("place.card.unavailable")
         self.unregisteredMessage = unregisteredMessage
+            ?? PlaceL10n.string("place.card.unregistered")
     }
 }
 
