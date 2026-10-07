@@ -31,7 +31,7 @@ public struct PlaceQuickRegistrationButton: View {
 
     public init(
         name: String = "Place",
-        title: String = "현재 장소 등록",
+        title: String = "Register Current Place",
         registrationService:
             PlaceRegistrationService,
         visitManager:
@@ -55,7 +55,7 @@ public struct PlaceQuickRegistrationButton: View {
 
     public init(
         name: String = "Place",
-        title: String = "현재 장소 등록",
+        title: String = "Register Current Place",
         placeStore:
             any PlaceStoring,
         locationProvider:
@@ -110,7 +110,7 @@ public struct PlaceQuickRegistrationButton: View {
 
                 Text(
                     isRegistering
-                    ? "장소 등록 중"
+                    ? PlaceL10n.string("place.quick.registering")
                     : title
                 )
             }
