@@ -37,6 +37,9 @@ let package = Package(
                     name: "TrisNotificationKit",
                     package: "TrisNotificationKit"
                 )
+            ],
+            resources: [
+                .process("Resources")
             ]
         ),
         .testTarget(

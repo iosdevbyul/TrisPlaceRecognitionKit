@@ -69,13 +69,13 @@ public final class PlaceRegistrationViewModel: ObservableObject {
         }
 
         guard (try? PlaceName(name)) != nil else {
-            errorMessage = "장소 이름은 1~10자로 입력해 주세요."
+            errorMessage = PlaceL10n.string("place.error.name_length")
             return
         }
 
         guard recognitionRadius.isFinite,
               recognitionRadius > 0 else {
-            errorMessage = "올바른 인식 반경을 선택해 주세요."
+            errorMessage = PlaceL10n.string("place.error.radius")
             return
         }
 
@@ -157,8 +157,9 @@ public final class PlaceRegistrationViewModel: ObservableObject {
                 warnings = latestWarnings
 
                 errorMessage =
-                    "중복 검사 결과가 변경되었습니다. " +
-                    "내용을 확인한 뒤 다시 등록해 주세요."
+                    PlaceL10n.string(
+                        "place.error.duplicate_changed"
+                    )
 
                 phase = .reviewing
                 return
@@ -182,16 +183,16 @@ private extension PlaceRegistrationViewModel {
         if let registrationError = error as? PlaceRegistrationError {
             switch registrationError {
             case .emptyName:
-                return "장소 이름을 입력해 주세요."
+                return PlaceL10n.string("place.error.name_required")
 
             case .nameTooLong:
-                return "장소 이름은 최대 10자까지 입력할 수 있습니다."
+                return PlaceL10n.string("place.error.name_max")
 
             case .currentWiFiUnavailable:
-                return "현재 연결된 Wi-Fi를 확인할 수 없습니다."
+                return PlaceL10n.string("place.error.wifi_unavailable")
 
             case .noAvailableSignal:
-                return "현재 위치 또는 Wi-Fi 정보를 확인할 수 없습니다."
+                return PlaceL10n.string("place.error.signal_unavailable")
             }
         }
 
