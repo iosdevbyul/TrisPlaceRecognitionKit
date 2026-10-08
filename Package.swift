@@ -18,11 +18,11 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/iosdevbyul/TrisLocationKit",
-            branch: "main"
+            from: "1.0.0"
         ),
         .package(
             url: "https://github.com/iosdevbyul/TrisNotificationKit",
-            branch: "main"
+            from: "1.0.0"
         )
     ],
     targets: [

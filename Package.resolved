@@ -6,8 +6,17 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/iosdevbyul/TrisLocationKit",
       "state" : {
-        "branch" : "main",
-        "revision" : "f9e82cdbfd5e098f2ef1a98e961cd0f9420c13b4"
+        "revision" : "c25e447bb502a9b8c1abc81d913f1cdf307f9533",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "trisnotificationkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/iosdevbyul/TrisNotificationKit",
+      "state" : {
+        "revision" : "97a61a2318e6940dc96af484f20cf0b099fba729",
+        "version" : "1.0.0"
       }
     }
   ],
