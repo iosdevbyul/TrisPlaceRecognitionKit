@@ -52,7 +52,7 @@ Add TrisPlaceRecognitionKit with Swift Package Manager.
 dependencies: [
     .package(
         url: "https://github.com/iosdevbyul/TrisPlaceRecognitionKit",
-        from: "1.0.0"
+        from: "1.1.0"
     )
 ]
 ```
