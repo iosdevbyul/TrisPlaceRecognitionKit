@@ -22,29 +22,40 @@ public struct PlaceRecognitionCardConfiguration {
     public var unregisteredMessage: String
 
     public init(
-        title: String = "장소 자동 인식",
-        registrationPrompt: String = "현재 장소를 등록하시겠습니까?",
-        registrationButtonTitle: String = "현재 장소 등록",
-        registrationNavigationTitle: String = "장소 등록",
-        enableButtonTitle: String = "자동 인식 켜기",
-        disableButtonTitle: String = "자동 인식 끄기",
-        manageButtonTitle: String = "장소 관리",
-        registeredPlaceSummaryTitle: String = "등록된 장소",
-        preparingMessage: String = "장소 인식 준비 중",
-        unavailableMessage: String = "장소 인식 서비스를 준비하고 있습니다.",
-        unregisteredMessage: String = "현재 등록된 장소에 있지 않습니다."
+        title: String? = nil,
+        registrationPrompt: String? = nil,
+        registrationButtonTitle: String? = nil,
+        registrationNavigationTitle: String? = nil,
+        enableButtonTitle: String? = nil,
+        disableButtonTitle: String? = nil,
+        manageButtonTitle: String? = nil,
+        registeredPlaceSummaryTitle: String? = nil,
+        preparingMessage: String? = nil,
+        unavailableMessage: String? = nil,
+        unregisteredMessage: String? = nil
     ) {
         self.title = title
+            ?? PlaceL10n.string("place.card.default_title")
         self.registrationPrompt = registrationPrompt
+            ?? PlaceL10n.string("place.card.default_prompt")
         self.registrationButtonTitle = registrationButtonTitle
+            ?? PlaceL10n.string("place.card.default_register")
         self.registrationNavigationTitle = registrationNavigationTitle
+            ?? PlaceL10n.string("place.registration.title")
         self.enableButtonTitle = enableButtonTitle
+            ?? PlaceL10n.string("place.card.enable")
         self.disableButtonTitle = disableButtonTitle
+            ?? PlaceL10n.string("place.card.disable")
         self.manageButtonTitle = manageButtonTitle
+            ?? PlaceL10n.string("place.card.default_manage")
         self.registeredPlaceSummaryTitle = registeredPlaceSummaryTitle
+            ?? PlaceL10n.string("place.card.default_registered")
         self.preparingMessage = preparingMessage
+            ?? PlaceL10n.string("place.card.preparing")
         self.unavailableMessage = unavailableMessage
+            ?? PlaceL10n.string("place.card.unavailable")
         self.unregisteredMessage = unregisteredMessage
+            ?? PlaceL10n.string("place.card.unregistered")
     }
 }
 
@@ -177,7 +188,13 @@ public struct PlaceRecognitionCard: View {
             recognitionStatus
 
             if let count = placeCountModel.count {
-                Text("\(configuration.registeredPlaceSummaryTitle) \(count)곳")
+                Text(
+                    PlaceL10n.format(
+                        "place.card.count",
+                        configuration.registeredPlaceSummaryTitle,
+                        count
+                    )
+                )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -425,7 +442,10 @@ private struct PlaceRecognitionCardStatusView:
                 .place
         {
             Label(
-                "\(place.name.value)에 있습니다.",
+                PlaceL10n.format(
+                    "place.card.at_place",
+                    place.name.value
+                ),
                 systemImage:
                     "checkmark.circle.fill"
             )
@@ -435,7 +455,9 @@ private struct PlaceRecognitionCardStatusView:
             .isEmpty
         {
             Label(
-                "등록된 장소에 있습니다.",
+                PlaceL10n.string(
+                    "place.card.at_registered"
+                ),
                 systemImage:
                     "checkmark.circle.fill"
             )

@@ -91,7 +91,7 @@ public struct PlaceListView: View {
                     )
 
                     Button(
-                        "다시 시도"
+                        PlaceL10n.string("place.retry")
                     ) {
 
                         Task {
@@ -110,7 +110,7 @@ public struct PlaceListView: View {
                 Spacer()
 
                 ProgressView(
-                    "장소 불러오는 중"
+                    PlaceL10n.string("place.loading")
                 )
 
                 Spacer()
@@ -120,14 +120,14 @@ public struct PlaceListView: View {
                 Spacer()
 
                 Text(
-                    "등록된 장소가 없습니다"
+                    PlaceL10n.string("place.empty")
                 )
                 .foregroundStyle(
                     .secondary
                 )
 
                 Button(
-                    "새로고침"
+                    PlaceL10n.string("place.refresh")
                 ) {
 
                     Task {
@@ -237,7 +237,7 @@ private extension PlaceListView {
                 if isRecognized {
 
                     Text(
-                        "현재 위치한 장소"
+                        PlaceL10n.string("place.current")
                     )
                     .font(
                         .subheadline
@@ -249,7 +249,10 @@ private extension PlaceListView {
                     if let activeVisit {
 
                         Text(
-                            "입장 \(formattedEntryTime(activeVisit.startedAt))"
+                            PlaceL10n.format(
+                                "place.arrived",
+                                formattedEntryTime(activeVisit.startedAt)
+                            )
                         )
                         .font(
                             .caption
@@ -261,7 +264,7 @@ private extension PlaceListView {
                     } else {
 
                         Text(
-                            "현재 감지됨"
+                            PlaceL10n.string("place.detected")
                         )
                         .font(
                             .caption
@@ -275,8 +278,13 @@ private extension PlaceListView {
                 Text(
                     place.networkIdentities
                         .isEmpty
-                    ? "GPS 전용"
-                    : "Wi-Fi \(place.networkIdentities.count)개"
+                    ? PlaceL10n.string(
+                        "place.gps_only"
+                    )
+                    : PlaceL10n.format(
+                        "place.wifi_count",
+                        place.networkIdentities.count
+                    )
                 )
                 .font(
                     .subheadline
@@ -287,8 +295,13 @@ private extension PlaceListView {
 
                 Text(
                     place.location.map {
-                        "인식 반경: \(Int($0.recognitionRadius))m"
-                    } ?? "GPS 위치 미등록"
+                        PlaceL10n.format(
+                            "place.radius",
+                            Int($0.recognitionRadius)
+                        )
+                    } ?? PlaceL10n.string(
+                        "place.gps_not_registered"
+                    )
                 )
                 .font(
                     .caption

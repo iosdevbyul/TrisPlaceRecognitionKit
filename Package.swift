@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "TrisPlaceRecognitionKit",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v15)
     ],
@@ -37,6 +38,9 @@ let package = Package(
                     name: "TrisNotificationKit",
                     package: "TrisNotificationKit"
                 )
+            ],
+            resources: [
+                .process("Resources")
             ]
         ),
         .testTarget(

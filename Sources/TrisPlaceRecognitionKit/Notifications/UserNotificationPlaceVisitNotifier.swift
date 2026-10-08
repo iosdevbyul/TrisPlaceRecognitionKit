@@ -21,9 +21,9 @@ struct UserNotificationPlaceVisitNotifier:
         try await notificationService
             .send(
                 title:
-                    "장소 도착",
+                    PlaceL10n.string("place.notification.arrival_title"),
                 body:
-                    "\(placeName)에 도착했습니다.",
+                    PlaceL10n.format("place.notification.arrival_body", placeName),
                 identifier:
                     makeIdentifier()
             )
@@ -39,9 +39,9 @@ struct UserNotificationPlaceVisitNotifier:
         try await notificationService
             .send(
                 title:
-                    "장소 이탈",
+                    PlaceL10n.string("place.notification.departure_title"),
                 body:
-                    "\(placeName)에서 나왔습니다.",
+                    PlaceL10n.format("place.notification.departure_body", placeName),
                 identifier:
                     makeIdentifier()
             )

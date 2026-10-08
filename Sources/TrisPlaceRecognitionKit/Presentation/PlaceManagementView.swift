@@ -109,7 +109,7 @@ public struct PlaceManagementView: View {
                         )
                 }
                 .navigationTitle(
-                    "장소"
+                    PlaceL10n.string("place.navigation_title")
                 )
                 .toolbar {
                     addPlaceToolbar
@@ -130,7 +130,7 @@ public struct PlaceManagementView: View {
                         )
                 }
                 .navigationTitle(
-                    "장소"
+                    PlaceL10n.string("place.navigation_title")
                 )
                 .toolbar {
                     addPlaceToolbar
@@ -214,7 +214,7 @@ private extension PlaceManagementView {
             } label: {
 
                 Label(
-                    "장소 추가",
+                    PlaceL10n.string("place.add"),
                     systemImage:
                         "plus"
                 )
@@ -243,7 +243,7 @@ private extension PlaceManagementView {
                     nil
             }
             .navigationTitle(
-                "장소 등록"
+                PlaceL10n.string("place.registration.title")
             )
             .navigationBarTitleDisplayMode(
                 .inline

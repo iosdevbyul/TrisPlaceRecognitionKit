@@ -56,7 +56,7 @@ public struct PlaceDetailView: View {
                     Text(errorMessage)
                         .foregroundStyle(.red)
 
-                    Button("확인") {
+                    Button(PlaceL10n.string("common.confirm")) {
                         viewModel.clearError()
                     }
                 }
@@ -83,7 +83,7 @@ public struct PlaceDetailView: View {
             ToolbarItem(
                 placement: .cancellationAction
             ) {
-                Button("닫기") {
+                Button(PlaceL10n.string("common.close")) {
                     dismiss()
                 }
                 .disabled(viewModel.isWorking)
@@ -91,11 +91,11 @@ public struct PlaceDetailView: View {
         }
         .interactiveDismissDisabled(viewModel.isWorking)
         .alert(
-            "장소 삭제",
+            PlaceL10n.string("place.detail.delete_title"),
             isPresented: $isShowingDeleteConfirmation
         ) {
             Button(
-                "삭제",
+                PlaceL10n.string("common.delete"),
                 role: .destructive
             ) {
                 Task {
@@ -104,23 +104,25 @@ public struct PlaceDetailView: View {
             }
 
             Button(
-                "취소",
+                PlaceL10n.string("common.cancel"),
                 role: .cancel
             ) {}
         } message: {
             Text(
-                "'\(viewModel.place.name.value)' 장소를 삭제하시겠습니까? " +
-                "삭제한 장소는 복구할 수 없습니다."
+                PlaceL10n.format(
+                    "place.detail.delete_message",
+                    viewModel.place.name.value
+                )
             )
         }
         .confirmationDialog(
-            "Wi-Fi 제거",
+            PlaceL10n.string("place.detail.wifi_remove_title"),
             isPresented: $isShowingWiFiRemovalConfirmation,
             titleVisibility: .visible
         ) {
             if let networkToRemove {
                 Button(
-                    "Wi-Fi 제거",
+                    PlaceL10n.string("place.detail.wifi_remove_title"),
                     role: .destructive
                 ) {
                     let network = networkToRemove
@@ -136,14 +138,16 @@ public struct PlaceDetailView: View {
             }
 
             Button(
-                "취소",
+                PlaceL10n.string("common.cancel"),
                 role: .cancel
             ) {
                 networkToRemove = nil
             }
         } message: {
             Text(
-                "선택한 Wi-Fi를 이 장소의 인식 대상에서 제거합니다."
+                PlaceL10n.string(
+                    "place.detail.wifi_remove_message"
+                )
             )
         }
         .onChange(of: viewModel.place) { updated in
@@ -166,16 +170,16 @@ public struct PlaceDetailView: View {
 private extension PlaceDetailView {
     
     var duplicateWarningsSection: some View {
-        Section("다른 장소와 인식 대상 중복") {
+        Section(PlaceL10n.string("place.detail.duplicate_section")) {
             if let error = viewModel.duplicateWarningErrorMessage {
-                Text("중복 검사를 완료하지 못했습니다.")
+                Text(PlaceL10n.string("place.detail.duplicate_failed"))
                     .foregroundStyle(.red)
 
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Button("다시 검사") {
+                Button(PlaceL10n.string("common.retry")) {
                     Task {
                         await viewModel.refreshDuplicateWarnings()
                     }
@@ -213,8 +217,9 @@ private extension PlaceDetailView {
 
             if !viewModel.duplicateWarnings.isEmpty {
                 Text(
-                    "중복 경고는 정보 제공용입니다. " +
-                    "현재 장소의 설정은 자동으로 변경되지 않습니다."
+                    PlaceL10n.string(
+                        "place.detail.duplicate_info"
+                    )
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -227,34 +232,37 @@ private extension PlaceDetailView {
     ) -> String {
         switch reason {
         case .sameBSSID:
-            return "동일한 Wi-Fi 공유기가 등록되어 있습니다."
+            return PlaceL10n.string("place.duplicate.same_bssid")
 
         case .sameSSID:
-            return "동일한 Wi-Fi 이름이 등록되어 있습니다."
+            return PlaceL10n.string("place.duplicate.same_ssid")
 
         case .overlappingGPS(let distance):
             return String(
-                format: "인식 영역이 겹칩니다. 중심 간 거리: %.0fm",
+                format: PlaceL10n.string("place.duplicate.overlap"),
                 distance
             )
         }
     }
 
     var nameSection: some View {
-        Section("장소 이름") {
+        Section(PlaceL10n.string("place.name")) {
             TextField(
-                "장소 이름",
+                PlaceL10n.string("place.name"),
                 text: $viewModel.name
             )
             .disabled(viewModel.isWorking)
 
             Text(
-                "최대 \(PlaceName.maximumLength)자"
+                PlaceL10n.format(
+                    "place.name.max_length",
+                    PlaceName.maximumLength
+                )
             )
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Button("이름 저장") {
+            Button(PlaceL10n.string("place.detail.save_name")) {
                 Task {
                     await viewModel.rename()
                 }
@@ -264,14 +272,14 @@ private extension PlaceDetailView {
     }
 
     var radiusSection: some View {
-        Section("인식 반경") {
+        Section(PlaceL10n.string("place.recognition_radius")) {
             HStack {
-                Text("반경")
+                Text(PlaceL10n.string("place.radius.label"))
 
                 Spacer()
 
                 TextField(
-                    "반경",
+                    PlaceL10n.string("place.radius.label"),
                     value: $viewModel.recognitionRadius,
                     format: .number
                 )
@@ -285,13 +293,16 @@ private extension PlaceDetailView {
 
             Text(
                 viewModel.place.location.map {
-                    "현재 저장된 반경: \(Int($0.recognitionRadius))m"
-                } ?? "GPS 위치가 아직 등록되지 않았습니다."
+                    PlaceL10n.format(
+                        "place.detail.saved_radius",
+                        Int($0.recognitionRadius)
+                    )
+                } ?? PlaceL10n.string("place.gps_not_registered")
             )
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Button("인식 반경 저장") {
+            Button(PlaceL10n.string("place.detail.save_radius")) {
                 Task {
                     await viewModel.updateRadius()
                 }
@@ -301,10 +312,10 @@ private extension PlaceDetailView {
     }
 
     var locationSection: some View {
-        Section("등록된 위치") {
+        Section(PlaceL10n.string("place.detail.location_section")) {
             if let location = viewModel.place.location {
                 detailRow(
-                    "위도",
+                    PlaceL10n.string("place.latitude"),
                     value: String(
                         format: "%.5f",
                         location.latitude
@@ -312,18 +323,18 @@ private extension PlaceDetailView {
                 )
 
                 detailRow(
-                    "경도",
+                    PlaceL10n.string("place.longitude"),
                     value: String(
                         format: "%.5f",
                         location.longitude
                     )
                 )
             } else {
-                Text("GPS 위치가 아직 등록되지 않았습니다.")
+                Text(PlaceL10n.string("place.gps_not_registered"))
                     .foregroundStyle(.secondary)
             }
 
-            Button("현재 위치로 변경") {
+            Button(PlaceL10n.string("place.detail.update_location")) {
                 Task {
                     await viewModel.updateCurrentLocation()
                 }
@@ -333,8 +344,9 @@ private extension PlaceDetailView {
             )
 
             Text(
-                "현재 위치를 다시 측정하고 위치 정확도를 " +
-                "확인한 뒤 저장합니다."
+                PlaceL10n.string(
+                    "place.detail.update_location_info"
+                )
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -342,12 +354,12 @@ private extension PlaceDetailView {
     }
 
     var wifiSection: some View {
-        Section("등록된 Wi-Fi") {
+        Section(PlaceL10n.string("place.detail.wifi_section")) {
             if viewModel.place.networkIdentities.isEmpty {
-                Text("등록된 Wi-Fi가 없습니다.")
+                Text(PlaceL10n.string("place.detail.wifi_empty"))
                     .foregroundStyle(.secondary)
 
-                Text("현재 이 장소는 GPS만 사용합니다.")
+                Text(PlaceL10n.string("place.detail.gps_only_info"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -364,7 +376,7 @@ private extension PlaceDetailView {
                             spacing: 4
                         ) {
                             Text(
-                                network.ssid ?? "SSID 없음"
+                                network.ssid ?? PlaceL10n.string("place.ssid.none")
                             )
                             .font(.body)
 
@@ -378,7 +390,7 @@ private extension PlaceDetailView {
                         Spacer()
 
                         Button(
-                            "제거",
+                            PlaceL10n.string("place.detail.remove"),
                             role: .destructive
                         ) {
                             networkToRemove = network
@@ -391,7 +403,7 @@ private extension PlaceDetailView {
                 }
             }
 
-            Button("현재 Wi-Fi 추가") {
+            Button(PlaceL10n.string("place.detail.add_current_wifi")) {
                 Task {
                     await viewModel.addCurrentWiFi()
                 }
@@ -401,8 +413,9 @@ private extension PlaceDetailView {
             )
 
             Text(
-                "현재 연결된 Wi-Fi만 추가할 수 있습니다. " +
-                "직접 SSID를 입력하는 기능은 제공하지 않습니다."
+                PlaceL10n.string(
+                    "place.detail.wifi_add_info"
+                )
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -412,7 +425,7 @@ private extension PlaceDetailView {
     var deleteSection: some View {
         Section {
             Button(
-                "장소 삭제",
+                PlaceL10n.string("place.detail.delete"),
                 role: .destructive
             ) {
                 isShowingDeleteConfirmation = true

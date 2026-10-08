@@ -30,8 +30,8 @@ public struct PlaceQuickRegistrationButton: View {
         @MainActor (Error) -> Void
 
     public init(
-        name: String = "Place",
-        title: String = "현재 장소 등록",
+        name: String? = nil,
+        title: String? = nil,
         registrationService:
             PlaceRegistrationService,
         visitManager:
@@ -42,7 +42,9 @@ public struct PlaceQuickRegistrationButton: View {
             @escaping @MainActor (Error) -> Void = { _ in }
     ) {
         self.name = name
+            ?? PlaceL10n.string("place.default_name")
         self.title = title
+            ?? PlaceL10n.string("place.card.default_register")
         self.registrationService =
             registrationService
         self.visitManager =
@@ -54,8 +56,8 @@ public struct PlaceQuickRegistrationButton: View {
     }
 
     public init(
-        name: String = "Place",
-        title: String = "현재 장소 등록",
+        name: String? = nil,
+        title: String? = nil,
         placeStore:
             any PlaceStoring,
         locationProvider:
@@ -110,7 +112,7 @@ public struct PlaceQuickRegistrationButton: View {
 
                 Text(
                     isRegistering
-                    ? "장소 등록 중"
+                    ? PlaceL10n.string("place.quick.registering")
                     : title
                 )
             }
