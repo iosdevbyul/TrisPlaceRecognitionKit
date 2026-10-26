@@ -301,15 +301,9 @@ private extension PlaceRecognitionCard {
     var controls:
         some View {
 
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 12) {
-                recognitionToggle
-                if onManagePlaces != nil { Spacer(minLength: 0); managePlacesButton }
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                recognitionToggle
-                if onManagePlaces != nil { managePlacesButton }
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            recognitionToggle
+            if onManagePlaces != nil { managePlacesButton }
         }
     }
 
