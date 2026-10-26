@@ -275,7 +275,7 @@ private extension PlaceRecognitionCard {
                     isShowingRegistration =
                         true
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PlaceCardActionStyle(prominent: true))
             }
         }
     }
@@ -301,7 +301,14 @@ private extension PlaceRecognitionCard {
     var controls:
         some View {
 
-        HStack {
+        VStack(alignment: .leading, spacing: 12) {
+            recognitionToggle
+            if onManagePlaces != nil { managePlacesButton }
+        }
+    }
+
+    @ViewBuilder
+    var recognitionToggle: some View {
             if isRecognitionRequested {
                 Button(
                     configuration
@@ -311,7 +318,7 @@ private extension PlaceRecognitionCard {
                         await onDisableRecognition()
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(PlaceCardActionStyle(prominent: false))
             } else {
                 Button(
                     configuration
@@ -321,21 +328,22 @@ private extension PlaceRecognitionCard {
                         await onEnableRecognition()
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PlaceCardActionStyle(prominent: true))
             }
 
-            if let onManagePlaces {
-                Spacer()
+    }
 
+    @ViewBuilder
+    var managePlacesButton: some View {
+            if let onManagePlaces {
                 Button(
                     configuration
                         .manageButtonTitle
                 ) {
                     onManagePlaces()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(PlaceCardActionStyle(prominent: false))
             }
-        }
     }
 
     @ViewBuilder
@@ -446,5 +454,26 @@ private struct PlaceRecognitionCardStatusView:
             )
             .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct PlaceCardActionStyle: ButtonStyle {
+    let prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(prominent ? Color.black : Color.primary)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                prominent ? Color(red: 0.54, green: 0.95, blue: 0.36)
+                          : Color.primary.opacity(0.12),
+                in: RoundedRectangle(cornerRadius: 14)
+            )
+            .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }
