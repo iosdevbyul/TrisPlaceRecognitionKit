@@ -37,7 +37,8 @@ let package = Package(
                     name: "TrisNotificationKit",
                     package: "TrisNotificationKit"
                 )
-            ]
+            ],
+            linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .testTarget(
             name: "TrisPlaceRecognitionKitTests",
