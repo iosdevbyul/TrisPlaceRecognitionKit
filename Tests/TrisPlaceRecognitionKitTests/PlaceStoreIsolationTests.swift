@@ -4,10 +4,10 @@ import Testing
 
 @testable import TrisPlaceRecognitionKit
 
-@available(iOS 17.0, *)
 struct PlaceStoreIsolationTests {
     @Test
     func unrelatedDefaultStoreIsNotModifiedOrCopied() throws {
+        guard #available(iOS 17.0, *) else { return }
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -33,6 +33,7 @@ struct PlaceStoreIsolationTests {
 
     @Test
     func legacyPlaceDatabaseIsCopiedAndPreserved() async throws {
+        guard #available(iOS 17.0, *) else { return }
         let fixture = try #require(
             Bundle.module.resourceURL?.appendingPathComponent("LegacySwiftDataV1", isDirectory: true)
         )
@@ -75,6 +76,7 @@ struct PlaceStoreIsolationTests {
     }
 }
 
+@available(iOS 17.0, *)
 @Model
 private final class UnrelatedRecord {
     var value: String
